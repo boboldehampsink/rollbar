@@ -1,0 +1,21 @@
+{
+  "name": "rollbar/rollbar",
+  "description": "Monitors errors and exceptions and reports them to Rollbar",
+  "type": "library",
+  "keywords": ["logging", "debugging", "monitoring", "errors", "exceptions"],
+  "license": "MIT",
+  "homepage": "http://github.com/rollbar/rollbar-php",
+  "authors": [
+    {
+      "name": "Rollbar, Inc.",
+      "email": "support@rollbar.com",
+      "role": "Developer"
+    }
+  ],
+  "support": {
+    "email": "support@rollbar.com"
+  },
+  "autoload": {
+    "classmap": ["rollbar.php"]
+  }
+}

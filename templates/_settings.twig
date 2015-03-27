@@ -1,0 +1,12 @@
+{% import "_includes/forms" as forms %}
+
+{{ forms.textField({
+    first:        true,
+    label:        "Access Token"|t,
+    id:           'accessToken',
+    name:         'accessToken',
+    instructions: "Rollbar project Access Token."|t,
+    value:        settings.accessToken,
+    autofocus:    true,
+    errors:       settings.getErrors('accessToken')
+}) }}
