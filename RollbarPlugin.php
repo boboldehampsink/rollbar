@@ -33,7 +33,7 @@ class RollbarPlugin extends BasePlugin
      */
     public function getVersion()
     {
-        return '1.0';
+        return '1.1';
     }
 
     /**
@@ -77,7 +77,7 @@ class RollbarPlugin extends BasePlugin
     {
         return craft()->templates->render('rollbar/_settings', array(
            'settings' => $this->getSettings(),
-       ));
+        ));
     }
 
     /**
@@ -85,27 +85,26 @@ class RollbarPlugin extends BasePlugin
      */
     public function init()
     {
-        // Only in production
-        if (!craft()->config->get('devMode')) {
+        // Get plugin settings
+        $settings = $this->getSettings();
 
-            // Get plugin settings
-            $settings = $this->getSettings();
+        // Require Rollbar vendor code
+        require_once CRAFT_PLUGINS_PATH.'rollbar/vendor/autoload.php';
 
-            // Require Rollbar vendor code
-            require_once CRAFT_PLUGINS_PATH.'rollbar/vendor/autoload.php';
+        // Initialize Rollbar
+        $rollbar = \Rollbar::init(array(
+            'access_token'  => $settings->accessToken,
+            'environment'   => CRAFT_ENVIRONMENT,
+        ), false, false);
 
-            // Initialize Rollbar
-            $rollbar = \Rollbar::init(array('access_token' => $settings->accessToken), false, false);
+        // Log Craft Exceptions to Rollbar
+        craft()->onException = function ($event) {
+            \Rollbar::report_exception($event->exception);
+        };
 
-            // Log Craft Exceptions to Rollbar
-            craft()->onException = function ($event) {
-                \Rollbar::report_exception($event->exception);
-            };
-
-            // Log Craft Errors to Rollbar
-            craft()->onError = function ($event) {
-                \Rollbar::report_message($event->message);
-            };
-        }
+        // Log Craft Errors to Rollbar
+        craft()->onError = function ($event) {
+            \Rollbar::report_message($event->message);
+        };
     }
 }
