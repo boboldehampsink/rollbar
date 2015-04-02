@@ -6,8 +6,8 @@ $vendorDir = dirname(dirname(__FILE__));
 $baseDir = dirname($vendorDir);
 
 return array(
-    'Ratchetio' => $vendorDir . '/rollbar/rollbar/rollbar.php',
-    'Rollbar' => $vendorDir . '/rollbar/rollbar/rollbar.php',
-    'RollbarNotifier' => $vendorDir . '/rollbar/rollbar/rollbar.php',
-    'iRollbarLogger' => $vendorDir . '/rollbar/rollbar/rollbar.php',
+    'Ratchetio' => $vendorDir . '/rollbar/rollbar/src/rollbar.php',
+    'Rollbar' => $vendorDir . '/rollbar/rollbar/src/rollbar.php',
+    'RollbarNotifier' => $vendorDir . '/rollbar/rollbar/src/rollbar.php',
+    'iRollbarLogger' => $vendorDir . '/rollbar/rollbar/src/rollbar.php',
 );
