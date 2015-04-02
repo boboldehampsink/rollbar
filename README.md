@@ -19,6 +19,9 @@ The plugin's folder should be named "rollbar"
 
 Changelog
 =================
+###1.1.1###
+ - Updated Rollbar PHP API to 0.10.0
+
 ###1.1###
  - Rollbar now logs your Craft environment
  - Rollbar is now not exclusive to devMode anymore
