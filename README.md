@@ -19,6 +19,10 @@ The plugin's folder should be named "rollbar"
 
 Changelog
 =================
+###1.2.0###
+ - Added a switch to disable reporting in devMode
+ - Updated Rollbar PHP API to 0.11.0
+
 ###1.1.1###
  - Updated Rollbar PHP API to 0.10.0
 
