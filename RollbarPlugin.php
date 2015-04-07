@@ -65,7 +65,7 @@ class RollbarPlugin extends BasePlugin
     {
         return array(
             'accessToken'      => AttributeType::String,
-            'reportInDevMode'  => AttributeType::Boolean,
+            'reportInDevMode'  => AttributeType::Bool,
         );
     }
 
