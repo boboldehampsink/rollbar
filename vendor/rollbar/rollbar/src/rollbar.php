@@ -83,7 +83,7 @@ if (!defined('ROLLBAR_INCLUDED_ERRNO_BITMASK')) {
 }
 
 class RollbarNotifier {
-    const VERSION = "0.10.0";
+    const VERSION = "0.11.0";
 
     // required
     public $access_token = '';
@@ -176,6 +176,10 @@ class RollbarNotifier {
 
     public function report_exception($exc, $extra_data = null, $payload_data = null) {
         try {
+            if (!$exc instanceof Exception) {
+                throw new Exception('Report exception requires an instance of Exception.');
+            }
+
             return $this->_report_exception($exc, $extra_data, $payload_data);
         } catch (Exception $e) {
             try {
@@ -232,9 +236,9 @@ class RollbarNotifier {
     }
 
     /**
-     * @param $exc Exception
+     * @param Exception $exc
      */
-    protected function _report_exception($exc, $extra_data = null, $payload_data = null) {
+    protected function _report_exception(Exception $exc, $extra_data = null, $payload_data = null) {
         if (!$this->check_config()) {
             return;
         }
@@ -246,24 +250,12 @@ class RollbarNotifier {
 
         $data = $this->build_base_data();
 
-        // exception info
-        $message = 'unknown';
-        if (method_exists($exc, 'getMessage')) {
-            $message = $exc->getMessage();
-        }
+        $trace_chain = $this->build_exception_trace_chain($exc, $extra_data);
 
-        $data['body'] = array(
-            'trace' => array(
-                'frames' => $this->build_exception_frames($exc),
-                'exception' => array(
-                    'class' => get_class($exc),
-                    'message' => $message
-                )
-            )
-        );
-
-        if ($extra_data !== null) {
-            $data['body']['trace']['extra'] = $extra_data;
+        if (count($trace_chain) > 1) {
+            $data['body']['trace_chain'] = $trace_chain;
+        } else {
+            $data['body']['trace'] = $trace_chain[0];
         }
 
         // request, server, person data
@@ -578,15 +570,55 @@ class RollbarNotifier {
     }
 
     /**
-     * @param $exc Exception
+     * @param Exception $exc
+     * @param mixed $extra_data
      * @return array
      */
-    protected function build_exception_frames($exc) {
-        $frames = array();
+    protected function build_exception_trace(Exception $exc, $extra_data = null)
+    {
+        $message = $exc->getMessage();
 
-        if (!method_exists($exc, 'getTrace')) {
-            return $frames;
+        $trace = array(
+            'frames' => $this->build_exception_frames($exc),
+            'exception' => array(
+                'class' => get_class($exc),
+                'message' => !empty($message) ? $message : 'unknown',
+            ),
+        );
+
+        if ($extra_data !== null) {
+            $trace['extra'] = $extra_data;
         }
+
+        return $trace;
+    }
+
+    /**
+     * @param Exception $exc
+     * @param array $extra_data
+     * @return array
+     */
+    protected function build_exception_trace_chain(Exception $exc, $extra_data = null)
+    {
+        $chain = array();
+        $chain[] = $this->build_exception_trace($exc, $extra_data);
+
+        $previous = $exc->getPrevious();
+
+        while ($previous instanceof Exception) {
+            $chain[] = $this->build_exception_trace($previous);
+            $previous = $previous->getPrevious();
+        }
+
+        return $chain;
+    }
+
+    /**
+     * @param Exception $exc
+     * @return array
+     */
+    protected function build_exception_frames(Exception $exc) {
+        $frames = array();
 
         foreach ($exc->getTrace() as $frame) {
             $frames[] = array(

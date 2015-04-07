@@ -98,24 +98,24 @@
     },
     {
         "name": "rollbar/rollbar",
-        "version": "v0.10.0",
-        "version_normalized": "0.10.0.0",
+        "version": "v0.11.0",
+        "version_normalized": "0.11.0.0",
         "source": {
             "type": "git",
             "url": "https://github.com/rollbar/rollbar-php.git",
-            "reference": "2eb5dd84f345200e7942f309e7b4244c3b52a87c"
+            "reference": "ef8bd4e16ec1e84eece96aeea17a1909d639e241"
         },
         "dist": {
             "type": "zip",
-            "url": "https://api.github.com/repos/rollbar/rollbar-php/zipball/2eb5dd84f345200e7942f309e7b4244c3b52a87c",
-            "reference": "2eb5dd84f345200e7942f309e7b4244c3b52a87c",
+            "url": "https://api.github.com/repos/rollbar/rollbar-php/zipball/ef8bd4e16ec1e84eece96aeea17a1909d639e241",
+            "reference": "ef8bd4e16ec1e84eece96aeea17a1909d639e241",
             "shasum": ""
         },
         "require-dev": {
             "mockery/mockery": "0.9.*",
             "phpunit/phpunit": "4.5.*"
         },
-        "time": "2015-03-31 01:49:56",
+        "time": "2015-04-04 00:22:54",
         "type": "library",
         "installation-source": "dist",
         "autoload": {
