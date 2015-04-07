@@ -64,7 +64,8 @@ class RollbarPlugin extends BasePlugin
     protected function defineSettings()
     {
         return array(
-            'accessToken' => AttributeType::String,
+            'accessToken'      => AttributeType::String,
+            'reportInDevMode'  => AttributeType::Boolean,
         );
     }
 
@@ -87,6 +88,11 @@ class RollbarPlugin extends BasePlugin
     {
         // Get plugin settings
         $settings = $this->getSettings();
+
+        // See if we have to report in devMode
+        if (!$settings->reportInDevMode && craft()->config->get('devMode')) {
+            return;
+        }
 
         // Require Rollbar vendor code
         require_once CRAFT_PLUGINS_PATH.'rollbar/vendor/autoload.php';

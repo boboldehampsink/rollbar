@@ -10,3 +10,11 @@
     autofocus:    true,
     errors:       settings.getErrors('accessToken')
 }) }}
+
+{{ forms.lightswitchField({
+	label:        "Report in devMode?"|t,
+	id:           'reportInDevMode',
+	name:         'reportInDevMode',
+	on:           settings.reportInDevMode,
+	errors:       settings.getErrors('reportInDevMode')
+}) }}
