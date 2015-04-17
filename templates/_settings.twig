@@ -11,6 +11,17 @@
     errors:       settings.getErrors('accessToken')
 }) }}
 
+{{ forms.textField({
+    first:        true,
+    label:        "Client Access Token"|t,
+    id:           'clientAccessToken',
+    name:         'clientAccessToken',
+    instructions: "Rollbar project Access Token for client-side."|t,
+    value:        settings.clientAccessToken,
+    autofocus:    true,
+    errors:       settings.getErrors('clientAccessToken')
+}) }}
+
 {{ forms.lightswitchField({
 	label:        "Report in devMode?"|t,
 	id:           'reportInDevMode',
