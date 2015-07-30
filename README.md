@@ -19,6 +19,9 @@ The plugin's folder should be named "rollbar"
 
 Changelog
 =================
+###1.3.1###
+ - Updated Rollbar to 0.11.2
+
 ###1.3.0###
  - Added client key setting and variables (thanks to russback)
  - Added a MIT license
