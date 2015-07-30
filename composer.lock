@@ -1,7 +1,7 @@
 {
     "_readme": [
         "This file locks the dependencies of your project to a known state",
-        "Read more about it at http://getcomposer.org/doc/01-basic-usage.md#composer-lock-the-lock-file",
+        "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#composer-lock-the-lock-file",
         "This file is @generated automatically"
     ],
     "hash": "2ca0132398d9709846e2f4ef34e84e87",
@@ -103,17 +103,20 @@
         },
         {
             "name": "rollbar/rollbar",
-            "version": "v0.11.0",
+            "version": "v0.11.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/rollbar/rollbar-php.git",
-                "reference": "ef8bd4e16ec1e84eece96aeea17a1909d639e241"
+                "reference": "1d8c5dce4a3eb2ed3f6767ae651f267ad354b43d"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/rollbar/rollbar-php/zipball/ef8bd4e16ec1e84eece96aeea17a1909d639e241",
-                "reference": "ef8bd4e16ec1e84eece96aeea17a1909d639e241",
+                "url": "https://api.github.com/repos/rollbar/rollbar-php/zipball/1d8c5dce4a3eb2ed3f6767ae651f267ad354b43d",
+                "reference": "1d8c5dce4a3eb2ed3f6767ae651f267ad354b43d",
                 "shasum": ""
+            },
+            "require": {
+                "ext-curl": "*"
             },
             "require-dev": {
                 "mockery/mockery": "0.9.*",
@@ -145,7 +148,7 @@
                 "logging",
                 "monitoring"
             ],
-            "time": "2015-04-04 00:22:54"
+            "time": "2015-05-27 21:44:30"
         }
     ],
     "packages-dev": [],
