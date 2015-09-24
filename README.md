@@ -35,6 +35,7 @@ Changelog
 =================
 ###1.4.0###
  - Moved settings to config file
+ - Updated Rollbar to 0.15.0
 
 ###1.3.1###
  - Updated Rollbar to 0.11.2
