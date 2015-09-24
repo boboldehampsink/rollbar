@@ -33,7 +33,7 @@ class RollbarPlugin extends BasePlugin
      */
     public function getVersion()
     {
-        return '1.3.1';
+        return '1.4.0';
     }
 
     /**
@@ -57,50 +57,16 @@ class RollbarPlugin extends BasePlugin
     }
 
     /**
-     * Define plugin settings.
-     *
-     * @return array
-     */
-    protected function defineSettings()
-    {
-        return array(
-            'accessToken'      => AttributeType::String,
-            'clientAccessToken' =>  AttributeType::String,
-            'reportInDevMode'  => AttributeType::Bool,
-        );
-    }
-
-    /**
-     * Get settings template.
-     *
-     * @return string
-     */
-    public function getSettingsHtml()
-    {
-        return craft()->templates->render('rollbar/_settings', array(
-           'settings' => $this->getSettings(),
-        ));
-    }
-
-    /**
      * Initialize Rollbar.
      */
     public function init()
     {
-        // Get plugin settings
-        $settings = $this->getSettings();
-
-        // See if we have to report in devMode
-        if (!$settings->reportInDevMode && craft()->config->get('devMode')) {
-            return;
-        }
-
         // Require Rollbar vendor code
-        require_once CRAFT_PLUGINS_PATH.'rollbar/vendor/autoload.php';
+        require_once __DIR__.'/vendor/autoload.php';
 
         // Initialize Rollbar
-        $rollbar = \Rollbar::init(array(
-            'access_token'  => $settings->accessToken,
+        \Rollbar::init(array(
+            'access_token'  => craft()->config->get('accessToken', 'rollbar'),
             'environment'   => CRAFT_ENVIRONMENT,
         ), false, false);
 

@@ -1,24 +1,41 @@
 Rollbar plugin for Craft CMS
 =================
 
-Plugin that allows you to log Craft Errors/Exceptions to Rollbar
- 
+Plugin that allows you to log Craft Errors/Exceptions to Rollbar.
+
+__Important__  
+The plugin's folder should be named "rollbar"
+
 Features
 =================
  - Log Craft Errors/Exceptions to Rollbar
- - Enter Rollbar access token via Plugin settings
+ - Keep Rollbar access token in your config settings
  - Logs the environment you're working on
  - Integrates seamlessly, one click install
- 
-###Roadmap###
- - Initialize earlier
- 
-Important:
+
+Getting started
 =================
-The plugin's folder should be named "rollbar"
+ - Create a rollbar.php file in craft/config/
+ - Set your rollbar config variables in there
+
+Example:
+```php
+<?php
+return array(
+    'accessToken' => '123456789'
+    'clientToken' => '123456789'
+);
+?>
+```
+
+If you want to get your client token in the templates, just use
+`craft.config.get('clientToken', 'rollbar')`
 
 Changelog
 =================
+###1.4.0###
+ - Moved settings to config file
+
 ###1.3.1###
  - Updated Rollbar to 0.11.2
 
