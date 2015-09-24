@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.15.0
+
+Bug fixes (all of which are unlikely, but possibly, breaking changes):
+
+- Fix bug where `scrub_fields` were case-sensitive, instead of case-insensitive as the docs say. See [#63](https://github.com/rollbar/rollbar-php/pull/63)
+- Fix bug where integer 0 keys would always be scrubbed. See [#64](https://github.com/rollbar/rollbar-php/pull/64) and [#65](https://github.com/rollbar/rollbar-php/pull/65)
+- Fix detection of the current URL when the protocol is `https` but no `SERVER_PORT` is set. See [#50](https://github.com/rollbar/rollbar-php/pull/50)
+
+## 0.14.0
+
+Possibly-breaking changes:
+
+- Fix bug where generated UUIDs could overlap if the application calls mt_srand() with a predictable value, and then Rollbar methods are called later. Rollbar now calls `mt_srand()` itself. This shouldn't affect anyone, unless you happen to be relying on the sequence of numbers coming from mt_rand across Rollbar calls.
+
+## 0.13.0
+
+Possibly-breaking changes (again relating to param scrubbing):
+
+- Param scrubbing is now applied to query string params inside the request URL. See [#59](https://github.com/rollbar/rollbar-php/pull/59)
+
+
+## 0.12.1
+
+Bug fixes:
+
+- `branch` now defaults to null (meaning it will not be set) instead of `master`. This fixes a bug where the Rollbar UI wouldn't use the "default branch" setting because it was being overridden by the value sent by rollbar-php. See [#58](https://github.com/rollbar/rollbar-php/pull/58).
+
+## 0.12.0
+
+Possibly-breaking changes (all related to param scrubbing):
+
+- Param scrubbing now accepts a regex string for the key name. Key names starting with `/` are assumed to be a regex.
+- Headers are now scrubbed
+- Arrays are recursively scrubbed
+
 ## 0.11.2
 
 Bug fixes:

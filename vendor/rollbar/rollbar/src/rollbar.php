@@ -84,7 +84,7 @@ if (!defined('ROLLBAR_INCLUDED_ERRNO_BITMASK')) {
 }
 
 class RollbarNotifier {
-    const VERSION = "0.11.2";
+    const VERSION = "0.15.0";
 
     // required
     public $access_token = '';
@@ -93,7 +93,7 @@ class RollbarNotifier {
     public $base_api_url = 'https://api.rollbar.com/api/1/';
     public $batch_size = 50;
     public $batched = true;
-    public $branch = 'master';
+    public $branch = null;
     public $capture_error_backtraces = true;
     public $code_version = null;
     public $environment = 'production';
@@ -457,14 +457,14 @@ class RollbarNotifier {
     protected function build_request_data() {
         if ($this->_request_data === null) {
             $request = array(
-                'url' => $this->current_url(),
+                'url' => $this->scrub_url($this->current_url()),
                 'user_ip' => $this->user_ip(),
                 'headers' => $this->headers(),
                 'method' => isset($_SERVER['REQUEST_METHOD']) ? $_SERVER['REQUEST_METHOD'] : null,
             );
 
             if ($_GET) {
-                $request['GET'] = $_GET;
+                $request['GET'] = $this->scrub_request_params($_GET);
             }
             if ($_POST) {
                 $request['POST'] = $this->scrub_request_params($_POST);
@@ -478,12 +478,27 @@ class RollbarNotifier {
         return $this->_request_data;
     }
 
-    protected function scrub_request_params($params) {
+    protected function scrub_url($url) {
+        $url_query = parse_url($url, PHP_URL_QUERY);
+        if (!$url_query) return $url;
+        parse_str($url_query, $parsed_output);
+        // using x since * requires URL-encoding
+        $scrubbed_params = $this->scrub_request_params($parsed_output, 'x');
+        $scrubbed_url = str_replace($url_query, http_build_query($scrubbed_params), $url);
+        return $scrubbed_url;
+    }
+
+    protected function scrub_request_params($params, $replacement = '*') {
         $scrubbed = array();
+        $potential_regex_filters = array_filter($this->scrub_fields, function($field) {
+            return strpos($field, '/') === 0;
+        });
         foreach ($params as $k => $v) {
-            if (in_array($k, $this->scrub_fields)) {
-                $count = is_array($v) ? count($v) : strlen($v);
-                $scrubbed[$k] = str_repeat('*', $count);
+            if ($this->_key_should_be_scrubbed($k, $potential_regex_filters)) {
+                $scrubbed[$k] = $this->_scrub($v, $replacement);
+            } elseif (is_array($v)) {
+                // recursively handle array params
+                $scrubbed[$k] = $this->scrub_request_params($v, $replacement);
             } else {
                 $scrubbed[$k] = $v;
             }
@@ -492,9 +507,22 @@ class RollbarNotifier {
         return $scrubbed;
     }
 
+    protected function _key_should_be_scrubbed($key, $potential_regex_filters) {
+        if (in_array(strtolower($key), $this->scrub_fields, true)) return true;
+        foreach ($potential_regex_filters as $potential_regex) {
+            if (@preg_match($potential_regex, $key)) return true;
+        }
+        return false;
+    }
+
+    protected function _scrub($value, $replacement = '*') {
+        $count = is_array($value) ? count($value) : strlen($value);
+        return str_repeat($replacement, $count);
+    }
+
     protected function headers() {
         $headers = array();
-        foreach ($_SERVER as $key => $val) {
+        foreach ($this->scrub_request_params($_SERVER) as $key => $val) {
             if (substr($key, 0, 5) == 'HTTP_') {
                 // convert HTTP_CONTENT_TYPE to Content-Type, HTTP_HOST to Host, etc.
                 $name = strtolower(substr($key, 5));
@@ -539,6 +567,8 @@ class RollbarNotifier {
             $port = $_SERVER['HTTP_X_FORWARDED_PORT'];
         } else if (!empty($_SERVER['SERVER_PORT'])) {
             $port = $_SERVER['SERVER_PORT'];
+        } else if ($proto === 'https') {
+            $port = 443;
         } else {
             $port = 80;
         }
@@ -924,6 +954,7 @@ class RollbarNotifier {
 
     // from http://www.php.net/manual/en/function.uniqid.php#94959
     protected function uuid4() {
+        mt_srand();
         return sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
             // 32 bits for "time_low"
             mt_rand(0, 0xffff), mt_rand(0, 0xffff),

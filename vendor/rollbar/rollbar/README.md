@@ -1,4 +1,4 @@
-# Rollbar notifier for PHP [![Build Status](https://travis-ci.org/rollbar/rollbar-php.png?branch=v0.11.2)](https://travis-ci.org/rollbar/rollbar-php)
+# Rollbar notifier for PHP [![Build Status](https://travis-ci.org/rollbar/rollbar-php.png?branch=v0.15.0)](https://travis-ci.org/rollbar/rollbar-php)
 
 <!-- RemoveNext -->
 
@@ -50,7 +50,7 @@ Add `rollbar/rollbar` to your `composer.json`:
 ```json
 {
     "require": {
-        "rollbar/rollbar": "~0.11.2"
+        "rollbar/rollbar": "~0.15.0"
     }
 }
 ```
@@ -92,7 +92,7 @@ Rollbar::init($config, $set_exception_handler, $set_error_handler);
 First, add the addon:
 
 ```
-heroku addons:add rollbar:free
+heroku addons:create rollbar:free
 ```
 
 The `access_token` and `root` config variables will be automatically detected, so the config is simply:
