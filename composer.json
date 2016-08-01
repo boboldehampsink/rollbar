@@ -10,6 +10,6 @@
     "type": "craft-plugin",
     "require": {
         "composer/installers": "~1.0",
-        "rollbar/rollbar": "~0.16.0"
+        "rollbar/rollbar": "~0.18.0"
     }
 }

@@ -6,6 +6,10 @@ include 'Level.php';
  *
  * Unless you need multiple RollbarNotifier instances in the same project, use this.
  */
+if ( !defined( 'BASE_EXCEPTION' ) ) {
+	define( 'BASE_EXCEPTION', version_compare( phpversion(), '7.0', '<' )? '\Exception': '\Throwable' );
+}
+
 class Rollbar {
     /** @var RollbarNotifier */
     public static $instance = null;
@@ -76,7 +80,33 @@ class Rollbar {
     }
 
     public static function flush() {
+        if (self::$instance == null) {
+            return;
+        }
         self::$instance->flush();
+    }
+}
+
+class RollbarException {
+    private $message;
+    private $exception;
+
+    /**
+     * RollbarException constructor.
+     * @param string $message
+     * @param Exception | Error $exception
+     */
+    public function __construct($message, $exception = null) {
+        $this->message = $message;
+        $this->exception = $exception;
+    }
+
+    public function getMessage() {
+        return $this->message;
+    }
+
+    public function getException() {
+        return $this->exception;
     }
 }
 
@@ -86,7 +116,7 @@ if (!defined('ROLLBAR_INCLUDED_ERRNO_BITMASK')) {
 }
 
 class RollbarNotifier {
-    const VERSION = "0.15.0";
+    const VERSION = "0.18.2";
 
     // required
     public $access_token = '';
@@ -110,6 +140,7 @@ class RollbarNotifier {
     public $person = null;
     public $person_fn = null;
     public $root = '';
+    public $checkIgnore = null;
     public $scrub_fields = array('passwd', 'pass', 'password', 'secret', 'confirm_password',
         'password_confirmation', 'auth_token', 'csrf_token');
     public $shift_function = true;
@@ -119,12 +150,13 @@ class RollbarNotifier {
     public $proxy = null;
     public $include_error_code_context = false;
     public $include_exception_code_context = false;
+    public $enable_utf8_sanitization = true;
 
     private $config_keys = array('access_token', 'base_api_url', 'batch_size', 'batched', 'branch',
         'capture_error_backtraces', 'code_version', 'environment', 'error_sample_rates', 'handler',
-        'agent_log_location', 'host', 'logger', 'included_errno', 'person', 'person_fn', 'root',
+        'agent_log_location', 'host', 'logger', 'included_errno', 'person', 'person_fn', 'root', 'checkIgnore',
         'scrub_fields', 'shift_function', 'timeout', 'report_suppressed', 'use_error_reporting', 'proxy',
-        'include_error_code_context', 'include_exception_code_context');
+        'include_error_code_context', 'include_exception_code_context', 'enable_utf8_sanitization');
 
     // cached values for request/server/person data
     private $_php_context = null;
@@ -187,8 +219,8 @@ class RollbarNotifier {
 
     public function report_exception($exc, $extra_data = null, $payload_data = null) {
         try {
-            if (!$exc instanceof Exception) {
-                throw new Exception('Report exception requires an instance of Exception.');
+            if ( !is_a( $exc, BASE_EXCEPTION ) ) {
+                throw new Exception(sprintf('Report exception requires an instance of %s.', BASE_EXCEPTION ));
             }
 
             return $this->_report_exception($exc, $extra_data, $payload_data);
@@ -247,9 +279,41 @@ class RollbarNotifier {
     }
 
     /**
-     * @param Exception $exc
+     * Run the checkIgnore function and determine whether to send the Exception to the API or not.
+     *
+     * @param  bool             $isUncaught
+     * @param  RollbarException $exception
+     * @param  array            $payload    Data being sent to the API
+     * @return bool
      */
-    protected function _report_exception(Exception $exc, $extra_data = null, $payload_data = null) {
+    protected function _shouldIgnore($isUncaught, RollbarException $exception, array $payload)
+    {
+        try {
+            if (is_callable($this->checkIgnore)
+                && call_user_func_array($this->checkIgnore, array($isUncaught,$exception,$payload))
+            ) {
+                $this->log_info('This item was not sent to Rollbar because it was ignored. '
+                    . 'This can happen if a custom checkIgnore() function was used.');
+
+                return true;
+            }
+        } catch (Exception $e) {
+            // Disable the custom checkIgnore and report errors in the checkIgnore function
+            $this->checkIgnore = null;
+            $this->log_error("Removing custom checkIgnore(). Error while calling custom checkIgnore function:\n"
+                . $e->getMessage());
+        }
+
+        return false;
+    }
+
+    /**
+     * @param \Throwable|\Exception $exc
+     * @param mixed $extra_data
+     * @param mixed$payload_data
+     * @return string the uuid of the occurrence
+     */
+    protected function _report_exception( $exc, $extra_data = null, $payload_data = null) {
         if (!$this->check_config()) {
             return;
         }
@@ -288,12 +352,21 @@ class RollbarNotifier {
         array_walk_recursive($data, array($this, '_sanitize_utf8'));
 
         $payload = $this->build_payload($data);
+
+        // Determine whether to send the request to the API.
+        if ($this->_shouldIgnore(true, new RollbarException($exc->getMessage(), $exc), $payload)) {
+            return;
+        }
+
         $this->send_payload($payload);
 
         return $data['uuid'];
     }
 
     protected function _sanitize_utf8(&$value) {
+        if (!$this->enable_utf8_sanitization)
+            return;
+
         if (!isset($this->_iconv_available)) {
             $this->_iconv_available = function_exists('iconv');
         }
@@ -420,6 +493,13 @@ class RollbarNotifier {
         array_walk_recursive($data, array($this, '_sanitize_utf8'));
 
         $payload = $this->build_payload($data);
+
+        // Determine whether to send the request to the API.
+        $exception = new ErrorException($error_class, 0, $errno, $errfile, $errline);
+        if ($this->_shouldIgnore(true, new RollbarException($exception->getMessage(), $exception), $payload)) {
+            return;
+        }
+
         $this->send_payload($payload);
 
         return $data['uuid'];
@@ -461,6 +541,12 @@ class RollbarNotifier {
         array_walk_recursive($data, array($this, '_sanitize_utf8'));
 
         $payload = $this->build_payload($data);
+
+        // Determine whether to send the request to the API.
+        if ($this->_shouldIgnore(true, new RollbarException($message), $payload)) {
+            return;
+        }
+
         $this->send_payload($payload);
 
         return $data['uuid'];
@@ -617,11 +703,11 @@ class RollbarNotifier {
     }
 
     /**
-     * @param Exception $exc
+     * @param \Throwable|\Exception $exc
      * @param mixed $extra_data
      * @return array
      */
-    protected function build_exception_trace(Exception $exc, $extra_data = null)
+    protected function build_exception_trace($exc, $extra_data = null)
     {
         $message = $exc->getMessage();
 
@@ -641,18 +727,18 @@ class RollbarNotifier {
     }
 
     /**
-     * @param Exception $exc
+     * @param \Throwable|\Exception $exc
      * @param array $extra_data
      * @return array
      */
-    protected function build_exception_trace_chain(Exception $exc, $extra_data = null)
+    protected function build_exception_trace_chain( $exc, $extra_data = null)
     {
         $chain = array();
         $chain[] = $this->build_exception_trace($exc, $extra_data);
 
         $previous = $exc->getPrevious();
 
-        while ($previous instanceof Exception) {
+        while ( is_a( $previous, BASE_EXCEPTION ) ) {
             $chain[] = $this->build_exception_trace($previous);
             $previous = $previous->getPrevious();
         }
@@ -661,10 +747,10 @@ class RollbarNotifier {
     }
 
     /**
-     * @param Exception $exc
+     * @param \Throwable|\Exception $exc
      * @return array
      */
-    protected function build_exception_frames(Exception $exc) {
+    protected function build_exception_frames($exc) {
         $frames = array();
 
         foreach ($exc->getTrace() as $frame) {
