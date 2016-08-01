@@ -33,7 +33,7 @@ class RollbarPlugin extends BasePlugin
      */
     public function getVersion()
     {
-        return '1.4.1';
+        return '1.4.2';
     }
 
     /**
@@ -66,8 +66,8 @@ class RollbarPlugin extends BasePlugin
 
         // Initialize Rollbar
         \Rollbar::init(array(
-            'access_token'  => craft()->config->get('accessToken', 'rollbar'),
-            'environment'   => CRAFT_ENVIRONMENT,
+            'access_token' => craft()->config->get('accessToken', 'rollbar'),
+            'environment' => CRAFT_ENVIRONMENT,
         ), false, false);
 
         // Log Craft Exceptions to Rollbar
