@@ -68,12 +68,10 @@ class RollbarPlugin extends BasePlugin
     public function init()
     {
         // Initialize Rollbar
-        Rollbar::init(
-            array(
-                'access_token' => craft()->config->get('accessToken', 'rollbar'),
-                'environment' => CRAFT_ENVIRONMENT,
-            )
-        );
+        Rollbar::init(array(
+            'access_token' => craft()->config->get('accessToken', 'rollbar'),
+            'environment' => CRAFT_ENVIRONMENT,
+        ), false, false);
 
         // Log Craft Exceptions to Rollbar
         craft()->onException = function ($event) {
