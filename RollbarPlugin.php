@@ -81,7 +81,7 @@ class RollbarPlugin extends BasePlugin
                 return;
             }
 
-            Rollbar::log(Level::error(), $event->exception);
+            Rollbar::log(Level::error(), $event->exception->getMessage());
         };
 
         // Log Craft Errors to Rollbar
