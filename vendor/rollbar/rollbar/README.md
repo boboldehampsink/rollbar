@@ -1,86 +1,72 @@
----
-layout: page
-sidebar: rollbar_sidebar
-permalink: /notifiers/rollbar-php/
-toc: false
----
-# Rollbar notifier for PHP [![Build Status](https://travis-ci.org/rollbar/rollbar-php.png?branch=v0.15.0)](https://travis-ci.org/rollbar/rollbar-php)
+# Rollbar notifier for PHP [![Build Status](https://api.travis-ci.org/rollbar/rollbar-php.png)](https://travis-ci.org/rollbar/rollbar-php)
 
 <!-- RemoveNext -->
 
 This library detects errors and exceptions in your application and reports them to [Rollbar](https://rollbar.com) for alerts, reporting, and analysis.
 
-<!-- START doctoc generated TOC please keep comment here to allow auto update -->
-<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
-##Table of Contents
-
-- [Quick start](#quick-start)
-- [Installation](#installation)
-  - [General](#general)
-  - [If Using Composer](#if-using-composer)
-- [Setup](#setup)
-  - [For Heroku Users](#for-heroku-users)
-- [Basic Usage](#basic-usage)
-- [Batching](#batching)
-- [Using Monolog](#using-monolog)
-- [Configuration](#configuration)
-  - [Asynchronous Reporting](#asynchronous-reporting)
-  - [Configuration reference](#configuration-reference)
-- [Related projects](#related-projects)
-- [Help / Support](#help--support)
-- [Contributing](#contributing)
-
-<!-- END doctoc generated TOC please keep comment here to allow auto update -->
+<!-- Sub:[TOC] -->
 
 ## Quick start
 
 ```php
 <?php
+use \Rollbar\Rollbar;
+use \Rollbar\Payload\Level;
+
 // installs global error and exception handlers
-Rollbar::init(array('access_token' => 'POST_SERVER_ITEM_ACCESS_TOKEN'));
+Rollbar::init(
+    array(
+        'access_token' => ROLLBAR_TEST_TOKEN,
+        'environment' => 'production'
+    )
+);
 
 try {
-    throw new Exception('test exception');
-} catch (Exception $e) {
-    Rollbar::report_exception($e);
+    throw new \Exception('test exception');
+} catch (\Exception $e) {
+    Rollbar::log(Level::error(), $e);
 }
 
 // Message at level 'info'
-Rollbar::report_message('testing 123', Level::INFO);
+Rollbar::log(Level::info(), 'testing info level');
 
 // With extra data (3rd arg) and custom payload options (4th arg)
-Rollbar::report_message('testing 123', Level::INFO,
-                        // key-value additional data
-                        array("some_key" => "some value"),  
-                        // payload options (overrides defaults) - see api docs
-                        array("fingerprint" => "custom-fingerprint-here"));
+Rollbar::log(
+    Level::info(),
+    'testing extra data',
+    array("some_key" => "some value") // key-value additional data
+);
 
 // raises an E_NOTICE which will *not* be reported by the error handler
 $foo = $bar;
 
 // will be reported by the exception handler
-throw new Exception('test 2');
+throw new \Exception('testing exception handler');
 ?>
 ```
 
 ## Installation
 
-### General
-
-Download [rollbar.php](https://raw.github.com/rollbar/rollbar-php/master/src/rollbar.php) and [Level.php](https://raw.githubusercontent.com/rollbar/rollbar-php/master/src/Level.php)
-and put them together somewhere you can access.
-
-### If Using Composer
+### Using Composer (recommended)
 
 Add `rollbar/rollbar` to your `composer.json`:
 
 ```json
 {
     "require": {
-        "rollbar/rollbar": "~0.18.0"
+        "rollbar/rollbar": "~1.0.1"
     }
 }
 ```
+
+### Manual installation if you are not using composer.json for your project
+
+Keep in mind, that even if you're not using composer for your project (using composer.json), you will still need composer package to install rollbar-php dependencies.
+
+1. If you don't have composer yet, follow these instructions to get the package: [install composer](https://getcomposer.org/doc/00-intro.md). It will be needed to install dependencies.
+2. Clone git repository [rollbar/rollbar-php](https://github.com/rollbar/rollbar-php) into a your external libraries path: `git clone https://github.com/rollbar/rollbar-php`
+2. Install rollbar-php dependencies: `cd rollbar-php && composer install && cd ..`
+3. Require rollbar-php in your PHP scripts: `require_once YOUR_LIBS_PATH . '/rollbar-php/vendor/autoload.php';`
 
 ## Setup
 
@@ -88,7 +74,7 @@ Add the following code at your application's entry point:
 
 ```php
 <?php
-require_once 'rollbar.php';
+use \Rollbar\Rollbar;
 
 $config = array(
     // required
@@ -126,6 +112,8 @@ The `access_token` and `root` config variables will be automatically detected, s
 
 ```php
 <?php
+use Rollbar\Rollbar;
+
 Rollbar::init(array(
     'environment' => 'production'
 ));
@@ -140,12 +128,15 @@ If you'd like to report exceptions that you catch yourself:
 
 ```php
 <?php
+use Rollbar\Rollbar;
+use Rollbar\Payload\Level;
+
 try {
     do_something();
-} catch (Exception $e) {
-    Rollbar::report_exception($e);
+} catch (\Exception $e) {
+    Rollbar::log(Level::error(), $e);
     // or
-    Rollbar::report_exception($e, array("my" => "extra", "data" => 42));
+    Rollbar::log(Level::error(), $e, array("my" => "extra", "data" => 42));
 }
 ?>
 ```
@@ -154,33 +145,26 @@ You can also send Rollbar log-like messages:
 
 ```php
 <?php
-Rollbar::report_message('could not connect to mysql server', Level::WARNING);
-Rollbar::report_message('Here is a message with some additional data',
-    Level::INFO, array('x' => 10, 'code' => 'blue'));
+use Rollbar\Rollbar;
+use Rollbar\Payload\Level;
+
+Rollbar::log(Level::warning(), 'could not connect to mysql server');
+Rollbar::log(
+    Level::info(), 
+    'Here is a message with some additional data',
+    array('x' => 10, 'code' => 'blue')
+);
 ?>
 ```
-
-## Batching
-
-By default, payloads are batched and sent to the Rollbar servers at the end of every script execution via a shutdown handler, or when the batch size reaches 50, whichever comes first. This works well in standard short-lived scripts, like serving web requests.
-
-If you're using Rollbar in a long-running script, such as a Laravel project or a background worker, you may want to manually flush the batch. To flush, simply call:
-
-```php
-Rollbar::flush();
-```
-
-For example, if using Laravel, add the above line to your `App::after()` event handler. Or in a looping background worker, call it at the end of each loop.
-
-You can also tune the max batch size or disable batching altogether. See the `batch_size` and `batched` config variables, documented below.
 
 ## Using Monolog
 
 Here is an example of how to use Rollbar as a handler for Monolog:
 
-```
+```php
 use Monolog\Logger;
-use Monolog\Handler\RollbarHandler;
+use Rollbar\Rollbar;
+use Rollbar\Payload\Level;
 
 $config = array('access_token' => 'POST_SERVER_ITEM_ACCESS_TOKEN');
 
@@ -188,11 +172,11 @@ $config = array('access_token' => 'POST_SERVER_ITEM_ACCESS_TOKEN');
 Rollbar::init($config);
 
 $log = new Logger('test');
-$log->pushHandler(new RollbarHandler(Rollbar::$instance));
+$log->pushHandler(new \Monolog\Handler\PsrHandler(Rollbar::logger()));
 
 try {
-    throw new Exception('exception for monolog');
-} catch (Exception $e) {
+    throw new \Exception('exception for monolog');
+} catch (\Exception $e) {
     $log->error($e);
 }
 ```
@@ -220,57 +204,51 @@ You'll also need to run the agent. See the [rollbar-agent docs](https://github.c
 All of the following options can be passed as keys in the `$config` array.
 
   <dl>
-  <dt>access_token</dt>
-  <dd>Your project access token.
-  </dd>
+<dt>access_token
+</dt>
+<dd>Your project access token.
+</dd>
 
-  <dt>agent_log_location</dt>
-  <dd>Path to the directory where agent relay log files should be written. Should not include final slash. Only used when handler is `agent`.
+<dt>agent_log_location
+</dt>
+<dd>Path to the directory where agent relay log files should be written. Should not include final slash. Only used when handler is `agent`.
 
 Default: `/var/www`
-  </dd>
+</dd>
 
-  <dt>base_api_url</dt>
-  <dd>The base api url to post to.
+<dt>base_api_url
+</dt>
+<dd>The base api url to post to.
 
 Default: `https://api.rollbar.com/api/1/`
-  </dd>
+</dd>
 
-  <dt>batch_size</dt>
-  <dd>Flush batch early if it reaches this size.
-
-Default: `50`
-  </dd>
-
-  <dt>batched</dt>
-  <dd>True to batch all reports from a single request together.
-
-Default: `true`
-  </dd>
-
-  <dt>branch</dt>
-  <dd>Name of the current branch.
+<dt>branch
+</dt>
+<dd>Name of the current branch.
 
 Default: `master`
-  </dd>
+</dd>
 
-  <dt>capture_error_stacktraces</dt>
-  <dd>Record full stacktraces for PHP errors.
+<dt>capture_error_stacktraces
+</dt>
+<dd>Record full stacktraces for PHP errors.
 
 Default: `true`
-  </dd>
+</dd>
 
-  <dt>checkIgnore</dt>
-  <dd>Function called before sending payload to Rollbar, return true to stop the error from being sent to Rollbar.
+<dt>checkIgnore
+</dt>
+<dd>Function called before sending payload to Rollbar, return true to stop the error from being sent to Rollbar.
 
 Default: `null`
-<br/>
+
 Parameters:
 * $isUncaught: boolean value set to true if the error was an uncaught exception.
 * $exception: a RollbarException instance that will allow you to get the message or exception
 * $payload: an array containing the payload as it will be sent to Rollbar. Payload schema can be found at https://rollbar.com/docs/api/items_post/
-<br/>
-```
+
+```php
 $config = array(
     'access_token' => '...',
     'checkIgnore' => function ($isUncaught, $exception, $payload) {
@@ -281,116 +259,133 @@ $config = array(
 
         // no other ignores
         return false;
-    }; 
+    };
 );
 Rollbar::init($config);
 ```
-  </dd>
 
-  <dt>code_version</dt>
-  <dd>The currently-deployed version of your code/application (e.g. a Git SHA). Should be a string.
+</dd>
+
+<dt>code_version
+</dt>
+<dd>The currently-deployed version of your code/application (e.g. a Git SHA). Should be a string.
 
 Default: `null`
-  </dd>
-  
-  <dt>enable_utf8_sanizations</dt>
-  <dd>set to false, to disable running iconv on the payload, may be needed if there is invalid characters, and the payload is being destroyed
-  
-Default: `true`
-  </dd>
+</dd>
 
-  <dt>environment</dt>
-  <dd>Environment name, e.g. `'production'` or `'development'`
+<dt>enable_utf8_sanitization
+</dt>
+<dd>set to false, to disable running iconv on the payload, may be needed if there is invalid characters, and the payload is being destroyed
+
+Default: `true`
+</dd>
+
+<dt>environment
+</dt>
+<dd>Environment name, e.g. `'production'` or `'development'`
 
 Default: `'production'`
-  </dd>
+</dd>
 
-  <dt>error_sample_rates</dt>
-  <dd>Associative array mapping error numbers to sample rates. Sample rates are ratio out of 1, e.g. 0 is "never report", 1 is "always report", and 0.1 is "report 10% of the time". Sampling is done on a per-error basis.
+<dt>error_sample_rates
+</dt>
+<dd>Associative array mapping error numbers to sample rates. Sample rates are ratio out of 1, e.g. 0 is "never report", 1 is "always report", and 0.1 is "report 10% of the time". Sampling is done on a per-error basis.
 
 Default: empty array, meaning all errors are reported.
-  </dd>
+</dd>
 
-  <dt>handler</dt>
-  <dd>Either `'blocking'` or `'agent'`. `'blocking'` uses curl to send requests immediately; `'agent'` writes a relay log to be consumed by [rollbar-agent](https://github.com/rollbar/rollbar-agent).
+<dt>handler
+</dt>
+<dd>Either `'blocking'` or `'agent'`. `'blocking'` uses curl to send requests immediately; `'agent'` writes a relay log to be consumed by [rollbar-agent](https://github.com/rollbar/rollbar-agent).
 
 Default: `'blocking'`
-  </dd>
+</dd>
 
-  <dt>host</dt>
-  <dd>Server hostname.
+<dt>host
+</dt>
+<dd>Server hostname.
 
 Default: `null`, which will result in a call to `gethostname()` (or `php_uname('n')` if that function does not exist)
-  </dd>
+</dd>
 
-  <dt>include_error_code_context</dt>
-  <dd>A boolean that indicates you wish to gather code context for instances of PHP Errors.
-    This can take a while because it requires reading the file from disk, so it's off by default.
+<dt>include_error_code_context
+</dt>
+<dd>A boolean that indicates you wish to gather code context for instances of PHP Errors.
+This can take a while because it requires reading the file from disk, so it's off by default.
 
-Default: false
-  </dd>
+Default: `false`
+</dd>
 
-  <dt>include_exception_code_context</dt>
-  <dd>A boolean that indicates you wish to gather code context for instances of PHP Exeptions.
-    This can take a while because it requires reading the file from disk, so it's off by default.
+<dt>include_exception_code_context
+</dt>
+<dd>A boolean that indicates you wish to gather code context for instances of PHP Exceptions.
+This can take a while because it requires reading the file from disk, so it's off by default.
 
-Default: false
-  </dd>
+Default: `false`
+</dd>
 
-  <dt>included_errno</dt>
-  <dd>A bitmask that includes all of the error levels to report. E.g. (E_ERROR | E_WARNING) to only report E_ERROR and E_WARNING errors. This will be used in combination with `error_reporting()` to prevent reporting of errors if `use_error_reporting` is set to `true`.
+<dt>included_errno
+</dt>
+<dd>A bitmask that includes all of the error levels to report. E.g. (E_ERROR \| E_WARNING) to only report E_ERROR and E_WARNING errors. This will be used in combination with `error_reporting()` to prevent reporting of errors if `use_error_reporting` is set to `true`.
 
-Default: (E_ERROR | E_WARNING | E_PARSE | E_CORE_ERROR | E_USER_ERROR | E_RECOVERABLE_ERROR)
-  </dd>
+Default: `(E_ERROR | E_WARNING | E_PARSE | E_CORE_ERROR | E_USER_ERROR | E_RECOVERABLE_ERROR)`
+</dd>
 
-  <dt>logger</dt>
-  <dd>An object that has a `log($level, $message)` method. If provided, will be used by RollbarNotifier to log messages.
-  </dd>
+<dt>logger
+</dt>
+<dd>An object that has a `log($level, $message)` method. If provided, will be used by RollbarNotifier to log messages.
+</dd>
 
-  <dt>person</dt>
-  <dd>An associative array containing data about the currently-logged in user. Required: `id`, optional: `username`, `email`. All values are strings.
-  </dd>
+<dt>person
+</dt>
+<dd>An associative array containing data about the currently-logged in user. Required: `id`, optional: `username`, `email`. All values are strings.
+</dd>
 
-  <dt>person_fn</dt>
-  <dd>A function reference (string, etc. - anything that [call_user_func()](http://php.net/call_user_func) can handle) returning an array like the one for 'person'.
-  </dd>
+<dt>person_fn
+</dt>
+<dd>A function reference (string, etc. - anything that [call_user_func()](http://php.net/call_user_func) can handle) returning an array like the one for 'person'.
+</dd>
 
-  <dt>root</dt>
-  <dd>Path to your project's root dir
-  </dd>
+<dt>root
+</dt>
+<dd>Path to your project's root dir
+</dd>
 
-  <dt>scrub_fields</dt>
-  <dd>Array of field names to scrub out of _POST and _SESSION. Values will be replaced with asterisks. If overriding, make sure to list all fields you want to scrub, not just fields you want to add to the default. Param names are converted to lowercase before comparing against the scrub list.
+<dt>scrub_fields
+</dt>
+<dd>Array of field names to scrub out of \_POST and \_SESSION. Values will be replaced with asterisks. If overriding, make sure to list all fields you want to scrub, not just fields you want to add to the default. Param names are converted to lowercase before comparing against the scrub list.
 
 Default: `('passwd', 'password', 'secret', 'confirm_password', 'password_confirmation', 'auth_token', 'csrf_token')`
-  </dd>
+</dd>
 
-  <dt>shift_function</dt>
-  <dd>Whether to shift function names in stack traces down one frame, so that the function name correctly reflects the context of each frame.
+<dt>shift_function
+</dt>
+<dd>Whether to shift function names in stack traces down one frame, so that the function name correctly reflects the context of each frame.
 
 Default: `true`
-  </dd>
+</dd>
 
-  <dt>timeout</dt>
-  <dd>Request timeout for posting to rollbar, in seconds.
+<dt>timeout
+</dt>
+<dd>Request timeout for posting to rollbar, in seconds.
 
 Default: `3`
-  </dd>
+</dd>
 
-  <dt>report_suppressed</dt>
-  <dd>Sets whether errors suppressed with '@' should be reported or not
-
-Default: `false`
-  </dd>
-
-  <dt>use_error_reporting</dt>
-  <dd>Sets whether to respect current `error_reporting()` level or not
+<dt>report_suppressed</dt>
+<dd>Sets whether errors suppressed with '@' should be reported or not
 
 Default: `false`
-  </dd>
+</dd>
 
-  <dt>proxy</dt>
-  <dd>Send data via a proxy server.
+<dt>use_error_reporting</dt>
+<dd>Sets whether to respect current `error_reporting()` level or not
+
+Default: `false`
+</dd>
+
+<dt>proxy</dt>
+<dd>Send data via a proxy server.
 
 E.g. Using a local proxy with no authentication
 
@@ -413,11 +408,12 @@ $config['proxy'] = array(
 ```
 
 Default: No proxy
-  </dd>
+</dd>
 
-  </dl>
+</dl>
 
 Example use of error_sample_rates:
+
 ```php
 <?php
 $config['error_sample_rates'] = array(
@@ -432,6 +428,7 @@ $config['error_sample_rates'] = array(
 ```
 
 Example use of person_fn:
+
 ```php
 <?php
 function get_current_user() {
@@ -455,6 +452,7 @@ A Laravel-specific package is available for integrating with Laravel: [Laravel-R
 A CakePHP-specific package is avaliable for integrating with CakePHP 2.x:
 [CakeRollbar](https://github.com/tranfuga25s/CakeRollbar)
 
+A Flow-specific package is available for integrating with Neos Flow: [m12/flow-rollbar](https://packagist.org/packages/m12/flow-rollbar)
 
 ## Help / Support
 
@@ -473,4 +471,8 @@ For bug reports, please [open an issue on GitHub](https://github.com/rollbar/rol
 4. Push to the branch (`git push origin my-new-feature`)
 5. Create new Pull Request
 
-Tests are in `tests`. To run the tests: `phpunit`
+
+## Testing
+Tests are in `tests`.
+To run the tests: `composer test`
+To fix code style issues: `composer fix`
