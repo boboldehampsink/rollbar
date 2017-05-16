@@ -11,7 +11,7 @@ namespace Craft;
  * @copyright Copyright (c) 2015, Bob Olde Hampsink
  * @license   http://buildwithcraft.com/license Craft License Agreement
  *
- * @link      http://github.com/boboldehampsink
+ * @see      http://github.com/boboldehampsink
  * @since     1.0
  */
 class RollbarPlugin extends BasePlugin
@@ -33,7 +33,7 @@ class RollbarPlugin extends BasePlugin
      */
     public function getVersion()
     {
-        return '1.4.2';
+        return '1.4.3';
     }
 
     /**
@@ -65,19 +65,19 @@ class RollbarPlugin extends BasePlugin
         require_once __DIR__.'/vendor/autoload.php';
 
         // Initialize Rollbar
-        \Rollbar::init(array(
+        \Rollbar\Rollbar::init(array(
             'access_token' => craft()->config->get('accessToken', 'rollbar'),
             'environment' => CRAFT_ENVIRONMENT,
         ), false, false);
 
         // Log Craft Exceptions to Rollbar
         craft()->onException = function ($event) {
-            \Rollbar::report_exception($event->exception);
+            \Rollbar\Rollbar::report_exception($event->exception);
         };
 
         // Log Craft Errors to Rollbar
         craft()->onError = function ($event) {
-            \Rollbar::report_message($event->message);
+            \Rollbar\Rollbar::report_message($event->message);
         };
     }
 }

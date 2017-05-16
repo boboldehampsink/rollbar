@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.1
+- Bug fix related to scrubbing potential query strings
+- Update notifier to send the correct version number in the payload
+
+## 1.0.0
+
+Almost everything has been refactored or rewritten. The updated README has all of the current
+information on how to use the notifier. This release includes API that is backwards compatible with 0.18.2,
+however this is for convenience only and the methods that have changed have been marked deprecated.
+
 ## 0.18.2
 
 - removed type hinting from RollbarException

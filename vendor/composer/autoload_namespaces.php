@@ -6,4 +6,5 @@ $vendorDir = dirname(dirname(__FILE__));
 $baseDir = dirname($vendorDir);
 
 return array(
+    '' => array($vendorDir . '/packfire/php5.3-compat/src'),
 );
