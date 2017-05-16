@@ -2,6 +2,12 @@
 
 namespace Craft;
 
+require_once __DIR__.'/vendor/autoload.php';
+
+use CHttpException;
+use Rollbar\Rollbar;
+use Rollbar\Payload\Level;
+
 /**
  * Rollbar Plugin.
  *
@@ -61,29 +67,28 @@ class RollbarPlugin extends BasePlugin
      */
     public function init()
     {
-        // Require Rollbar vendor code
-        require_once __DIR__.'/vendor/autoload.php';
-
         // Initialize Rollbar
-        \Rollbar\Rollbar::init(array(
-            'access_token' => craft()->config->get('accessToken', 'rollbar'),
-            'environment' => CRAFT_ENVIRONMENT,
-        ), false, false);
+        Rollbar::init(
+            array(
+                'access_token' => craft()->config->get('accessToken', 'rollbar'),
+                'environment' => CRAFT_ENVIRONMENT,
+            )
+        );
 
         // Log Craft Exceptions to Rollbar
         craft()->onException = function ($event) {
             // Short circuit - don't report 404s, or twig template {% exit 404 %} to Rollbar
-            if ((($event->exception instanceof \CHttpException) && ($event->exception->statusCode == 404)) ||
-                (($event->exception->getPrevious() instanceof \CHttpException) && ($event->exception->getPrevious()->statusCode == 404))) {
+            if ((($event->exception instanceof CHttpException) && ($event->exception->statusCode == 404)) ||
+                (($event->exception->getPrevious() instanceof CHttpException) && ($event->exception->getPrevious()->statusCode == 404))) {
                 return;
             }
 
-            \Rollbar\Rollbar::report_exception($event->exception);
+            Rollbar::log(Level::error(), $event->exception);
         };
 
         // Log Craft Errors to Rollbar
         craft()->onError = function ($event) {
-            \Rollbar\Rollbar::report_message($event->message);
+            Rollbar::log(Level::error(), $event->message);
         };
     }
 }
