@@ -33,7 +33,8 @@ If you want to get your client token in the templates, just use
 
 Changelog
 =================
-### 1.4.3
+### 1.5.0
+ - Don't report 404 errors (thanks to @bossanova808)
  - Updated Rollbar to 1.0.1
 
 ### 1.4.2
