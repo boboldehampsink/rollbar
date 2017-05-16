@@ -72,6 +72,12 @@ class RollbarPlugin extends BasePlugin
 
         // Log Craft Exceptions to Rollbar
         craft()->onException = function ($event) {
+            // Short circuit - don't report 404s, or twig template {% exit 404 %} to Rollbar
+            if ((($event->exception instanceof \CHttpException) && ($event->exception->statusCode == 404))  ||
+                (($event->exception->getPrevious() instanceof \CHttpException) && ($event->exception->getPrevious()->statusCode == 404))) {
+                return;
+            }
+
             \Rollbar\Rollbar::report_exception($event->exception);
         };
 
