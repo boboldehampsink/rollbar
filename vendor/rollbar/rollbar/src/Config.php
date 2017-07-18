@@ -1,7 +1,7 @@
 <?php namespace Rollbar;
 
-use Rollbar\Payload\Payload;
 use Rollbar\Payload\Level;
+use Rollbar\Payload\Payload;
 
 if (!defined('ROLLBAR_INCLUDED_ERRNO_BITMASK')) {
     define(
@@ -18,6 +18,17 @@ class Config
      */
     private $dataBuilder;
     private $configArray;
+    
+    /**
+     * @var LevelFactory
+     */
+    private $levelFactory;
+    
+    /**
+     * @var Utilities
+     */
+    private $utilities;
+    
     /**
      * @var TransformerInterface
      */
@@ -37,20 +48,39 @@ class Config
     private $sender;
     private $reportSuppressed;
     /**
+     * @var Scrubber
+     */
+    private $scrubber;
+    /**
      * @var callable
      */
     private $checkIgnore;
     private $error_sample_rates = array();
+    private $exception_sample_rates = array();
     private $mt_randmax;
 
     private $included_errno = ROLLBAR_INCLUDED_ERRNO_BITMASK;
+    private $use_error_reporting = false;
+    
+    /**
+     * @var boolean Should debug_backtrace() data be sent with string messages
+     * sent through RollbarLogger::log()
+     */
+    private $sendMessageTrace = false;
 
     public function __construct(array $configArray)
     {
+        $this->levelFactory = new LevelFactory();
+        $this->utilities = new Utilities();
+        
         $this->updateConfig($configArray);
 
         if (isset($configArray['error_sample_rates'])) {
             $this->error_sample_rates = $configArray['error_sample_rates'];
+        }
+        
+        if (isset($configArray['exception_sample_rates'])) {
+            $this->exception_sample_rates = $configArray['exception_sample_rates'];
         }
 
         $levels = array(E_WARNING, E_NOTICE, E_USER_ERROR, E_USER_WARNING,
@@ -84,118 +114,186 @@ class Config
         return $this->configArray;
     }
 
-    protected function updateConfig($c)
+    protected function updateConfig($config)
     {
-        $this->configArray = $c;
+        $this->configArray = $config;
+
+        $this->setAccessToken($config);
+        $this->setDataBuilder($config);
+        $this->setTransformer($config);
+        $this->setMinimumLevel($config);
+        $this->setReportSuppressed($config);
+        $this->setFilters($config);
+        $this->setSender($config);
+        $this->setScrubber($config);
+        $this->setResponseHandler($config);
+        $this->setCheckIgnoreFunction($config);
+        $this->setSendMessageTrace($config);
+
+        if (isset($config['included_errno'])) {
+            $this->included_errno = $config['included_errno'];
+        }
+
+        if (isset($config['use_error_reporting'])) {
+            $this->use_error_reporting = $config['use_error_reporting'];
+        }
+    }
+
+    private function setAccessToken($config)
+    {
+        if (isset($_ENV['ROLLBAR_ACCESS_TOKEN']) && !isset($config['access_token'])) {
+            $config['access_token'] = $_ENV['ROLLBAR_ACCESS_TOKEN'];
+        }
+        $this->utilities->validateString($config['access_token'], "config['access_token']", 32, false);
+        $this->accessToken = $config['access_token'];
+    }
+
+    private function setDataBuilder($config)
+    {
+        if (!isset($config['levelFactory'])) {
+            $config['levelFactory'] = $this->levelFactory;
+        }
         
-        $this->setAccessToken($c);
-        $this->setDataBuilder($c);
-        $this->setTransformer($c);
-        $this->setMinimumLevel($c);
-        $this->setReportSuppressed($c);
-        $this->setFilters($c);
-        $this->setSender($c);
-        $this->setResponseHandler($c);
-        $this->setCheckIgnoreFunction($c);
-
-        if (isset($c['included_errno'])) {
-            $this->included_errno = $c['included_errno'];
+        if (!isset($config['utilities'])) {
+            $config['utilities'] = $this->utilities;
         }
-    }
-
-    private function setAccessToken($c)
-    {
-        if (isset($_ENV['ROLLBAR_ACCESS_TOKEN']) && !isset($c['access_token'])) {
-            $c['access_token'] = $_ENV['ROLLBAR_ACCESS_TOKEN'];
-        }
-        Utilities::validateString($c['access_token'], "config['access_token']", 32, false);
-        $this->accessToken = $c['access_token'];
-    }
-
-    private function setDataBuilder($c)
-    {
+        
         $exp = "Rollbar\DataBuilderInterface";
         $def = "Rollbar\DataBuilder";
-        $this->setupWithOptions($c, "dataBuilder", $exp, $def, true);
+        $this->setupWithOptions($config, "dataBuilder", $exp, $def, true);
     }
 
-    private function setTransformer($c)
+    private function setTransformer($config)
     {
         $expected = "Rollbar\TransformerInterface";
-        $this->setupWithOptions($c, "transformer", $expected);
+        $this->setupWithOptions($config, "transformer", $expected);
     }
 
-    private function setMinimumLevel($c)
+    private function setMinimumLevel($config)
     {
-        if (empty($c['minimumLevel'])) {
+        $this->minimumLevel = 0;
+        if (empty($config['minimumLevel'])) {
             $this->minimumLevel = 0;
-        } elseif ($c['minimumLevel'] instanceof Level) {
-            $this->minimumLevel = $c['minimumLevel']->toInt();
-        } elseif (is_string($c['minimumLevel'])) {
-            $level = Level::fromName($c['minimumLevel']);
+        } elseif ($config['minimumLevel'] instanceof Level) {
+            $this->minimumLevel = $config['minimumLevel']->toInt();
+        } elseif (is_string($config['minimumLevel'])) {
+            $level = $this->levelFactory->fromName($config['minimumLevel']);
             if ($level !== null) {
                 $this->minimumLevel = $level->toInt();
             }
-        } elseif (is_int($c['minimumLevel'])) {
-            $this->minimumLevel = $c['minimumLevel'];
-        } else {
-            $this->minimumLevel = 0;
+        } elseif (is_int($config['minimumLevel'])) {
+            $this->minimumLevel = $config['minimumLevel'];
         }
     }
 
-    private function setReportSuppressed($c)
+    private function setReportSuppressed($config)
     {
-        $this->reportSuppressed = isset($c['reportSuppressed']) && $c['reportSuppressed'];
+        $this->reportSuppressed = isset($config['reportSuppressed']) && $config['reportSuppressed'];
         if (!isset($this->reportSuppressed)) {
-            $this->reportSuppressed = isset($c['report_suppressed']) && $c['report_suppressed'];
+            $this->reportSuppressed = isset($config['report_suppressed']) && $config['report_suppressed'];
         }
     }
 
-    private function setFilters($c)
+    private function setFilters($config)
     {
-        $this->setupWithOptions($c, "filter", "Rollbar\FilterInterface");
+        $this->setupWithOptions($config, "filter", "Rollbar\FilterInterface");
     }
 
-    private function setSender($c)
+    private function setSender($config)
     {
         $expected = "Rollbar\Senders\SenderInterface";
         $default = "Rollbar\Senders\CurlSender";
 
-        if (array_key_exists('base_api_url', $c)) {
-            $c['senderOptions']['endpoint'] = $c['base_api_url'];
-        }
+        $this->setTransportOptions($config);
+        $default = $this->setAgentSenderOptions($config, $default);
+        $default = $this->setFluentSenderOptions($config, $default);
 
-        if (array_key_exists('timeout', $c)) {
-            $c['senderOptions']['timeout'] = $c['timeout'];
-        }
-
-        if (array_key_exists('proxy', $c)) {
-            $c['senderOptions']['proxy'] = $c['proxy'];
-        }
-
-        if (array_key_exists('handler', $c) && $c['handler'] == 'agent') {
-            $default = "Rollbar\Senders\AgentSender";
-            if (array_key_exists('agent_log_location', $c)) {
-                $c['senderOptions'] = array(
-                    'agentLogLocation' => $c['agent_log_location']
-                );
-            }
-        }
-        $this->setupWithOptions($c, "sender", $expected, $default);
+        $this->setupWithOptions($config, "sender", $expected, $default);
     }
 
-    private function setResponseHandler($c)
+    private function setScrubber($config)
     {
-        $this->setupWithOptions($c, "responseHandler", "Rollbar\ResponseHandlerInterface");
+        $exp = "Rollbar\ScrubberInterface";
+        $def = "Rollbar\Scrubber";
+        $this->setupWithOptions($config, "scrubber", $exp, $def, true);
     }
 
-    private function setCheckIgnoreFunction($c)
+    private function setTransportOptions(&$config)
     {
-        if (!isset($c['checkIgnore'])) {
+        if (array_key_exists('base_api_url', $config)) {
+            $config['senderOptions']['endpoint'] = $config['base_api_url'] . 'item/';
+        }
+
+        if (array_key_exists('endpoint', $config)) {
+            $config['senderOptions']['endpoint'] = $config['endpoint'] . 'item/';
+        }
+
+        if (array_key_exists('timeout', $config)) {
+            $config['senderOptions']['timeout'] = $config['timeout'];
+        }
+
+        if (array_key_exists('proxy', $config)) {
+            $config['senderOptions']['proxy'] = $config['proxy'];
+        }
+    }
+
+    private function setAgentSenderOptions(&$config, $default)
+    {
+        if (!array_key_exists('handler', $config) || $config['handler'] != 'agent') {
+            return $default;
+        }
+        $default = "Rollbar\Senders\AgentSender";
+        if (array_key_exists('agent_log_location', $config)) {
+            $config['senderOptions'] = array(
+                'agentLogLocation' => $config['agent_log_location']
+            );
+        }
+        return $default;
+    }
+
+    private function setFluentSenderOptions(&$config, $default)
+    {
+        if (!isset($config['handler']) || $config['handler'] != 'fluent') {
+            return $default;
+        }
+        $default = "Rollbar\Senders\FluentSender";
+
+        if (isset($config['fluent_host'])) {
+            $config['senderOptions']['fluentHost'] = $config['fluent_host'];
+        }
+
+        if (isset($config['fluent_port'])) {
+            $config['senderOptions']['fluentPort'] = $config['fluent_port'];
+        }
+
+        if (isset($config['fluent_tag'])) {
+            $config['senderOptions']['fluentTag'] = $config['fluent_tag'];
+        }
+
+        return $default;
+    }
+
+    private function setResponseHandler($config)
+    {
+        $this->setupWithOptions($config, "responseHandler", "Rollbar\ResponseHandlerInterface");
+    }
+
+    private function setCheckIgnoreFunction($config)
+    {
+        if (!isset($config['checkIgnore'])) {
             return;
         }
 
-        $this->checkIgnore = $c['checkIgnore'];
+        $this->checkIgnore = $config['checkIgnore'];
+    }
+
+    private function setSendMessageTrace($config)
+    {
+        if (!isset($config['send_message_trace'])) {
+            return;
+        }
+
+        $this->sendMessageTrace = $config['send_message_trace'];
     }
 
     /**
@@ -216,20 +314,21 @@ class Config
      * `new MySender(array("speed"=>11,"protocol"=>"First Contact"));`
      * You can also just pass an instance in directly. (In which case options
      * are ignored)
-     * @param $c
+     * @param $config
      * @param $keyName
      * @param $expectedType
      * @param mixed $defaultClass
      * @param bool $passWholeConfig
      */
     protected function setupWithOptions(
-        $c,
+        $config,
         $keyName,
         $expectedType,
         $defaultClass = null,
         $passWholeConfig = false
     ) {
-        $$keyName = isset($c[$keyName]) ? $c[$keyName] : null;
+
+        $$keyName = isset($config[$keyName]) ? $config[$keyName] : null;
 
         if (is_null($defaultClass) && is_null($$keyName)) {
             return;
@@ -240,9 +339,11 @@ class Config
         }
         if (is_string($$keyName)) {
             if ($passWholeConfig) {
-                $options = $c;
+                $options = $config;
             } else {
-                $options = isset($c[$keyName . "Options"]) ? $c[$keyName . "Options"] : array();
+                $options = isset($config[$keyName . "Options"]) ?
+                            $config[$keyName . "Options"] :
+                            array();
             }
             $this->$keyName = new $$keyName($options);
         } else {
@@ -250,7 +351,9 @@ class Config
         }
 
         if (!$this->$keyName instanceof $expectedType) {
-            throw new \InvalidArgumentException("$keyName must be a $expectedType");
+            throw new \InvalidArgumentException(
+                "$keyName must be a $expectedType"
+            );
         }
     }
 
@@ -258,10 +361,25 @@ class Config
     {
         return $this->dataBuilder->makeData($level, $toLog, $context);
     }
-    
+
     public function getDataBuilder()
     {
         return $this->dataBuilder;
+    }
+    
+    public function getLevelFactory()
+    {
+        return $this->levelFactory;
+    }
+    
+    public function getSender()
+    {
+        return $this->sender;
+    }
+
+    public function getScrubber()
+    {
+        return $this->scrubber;
     }
 
     /**
@@ -284,40 +402,134 @@ class Config
         return $this->accessToken;
     }
 
-    public function checkIgnored($payload, $accessToken, $toLog)
+    public function getSendMessageTrace()
+    {
+        return $this->sendMessageTrace;
+    }
+
+    public function checkIgnored($payload, $accessToken, $toLog, $isUncaught)
     {
         if ($this->shouldSuppress()) {
             return true;
         }
-        if (isset($this->checkIgnore) && call_user_func($this->checkIgnore)) {
-            return true;
+        
+        if (isset($this->checkIgnore)) {
+            try {
+                if (call_user_func($this->checkIgnore, $isUncaught, $toLog, $payload)) {
+                    return true;
+                }
+            } catch (Exception $exception) {
+                // We should log that we are removing the custom checkIgnore
+                $this->checkIgnore = null;
+            }
         }
+        
         if ($this->levelTooLow($payload)) {
             return true;
         }
+        
         if (!is_null($this->filter)) {
             return $this->filter->shouldSend($payload, $accessToken);
         }
 
         if ($toLog instanceof ErrorWrapper) {
-            $errno = $toLog->errorLevel;
+            return $this->shouldIgnoreError($toLog);
+        }
+        
+        if ($toLog instanceof \Exception) {
+            return $this->shouldIgnoreException($toLog);
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Check if the error should be ignored due to `included_errno` config,
+     * `use_error_reporting` config or `error_sample_rates` config.
+     *
+     * @param \Rollbar\ErrorWrapper $toLog
+     *
+     * @return bool
+     */
+    protected function shouldIgnoreError(ErrorWrapper $toLog)
+    {
+        $errno = $toLog->errorLevel;
 
-            if ($this->included_errno != -1 && ($errno & $this->included_errno) != $errno) {
-                // ignore
+        if ($this->included_errno != -1 && ($errno & $this->included_errno) != $errno) {
+            // ignore
+            return true;
+        }
+
+        if ($this->use_error_reporting && ($errno & error_reporting()) != $errno) {
+            // ignore due to error_reporting level
+            return true;
+        }
+
+        if (isset($this->error_sample_rates[$errno])) {
+            // get a float in the range [0, 1)
+            // mt_rand() is inclusive, so add 1 to mt_randmax
+            $float_rand = mt_rand() / ($this->mt_randmax + 1);
+            if ($float_rand > $this->error_sample_rates[$errno]) {
+                // skip
                 return true;
             }
-
-            if (isset($this->error_sample_rates[$errno])) {
-                // get a float in the range [0, 1)
-                // mt_rand() is inclusive, so add 1 to mt_randmax
-                $float_rand = mt_rand() / ($this->mt_randmax + 1);
-                if ($float_rand > $this->error_sample_rates[$errno]) {
-                    // skip
-                    return true;
-                }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Check if the exception should be ignored due to configured exception
+     * sample rates.
+     *
+     * @param \Exception $toLog
+     *
+     * @return bool
+     */
+    protected function shouldIgnoreException(\Exception $toLog)
+    {
+        // get a float in the range [0, 1)
+        // mt_rand() is inclusive, so add 1 to mt_randmax
+        $floatRand = mt_rand() / ($this->mt_randmax + 1);
+        if ($floatRand > $this->exceptionSampleRate($toLog)) {
+            // skip
+            return true;
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Calculate what's the chance of logging this exception according to
+     * exception sampling.
+     *
+     * @param \Exception $toLog
+     *
+     * @return float
+     */
+    public function exceptionSampleRate(\Exception $toLog)
+    {
+        $sampleRate = 1.0;
+        if (count($this->exception_sample_rates) == 0) {
+            return $sampleRate;
+        }
+        
+        $exceptionClasses = array();
+        
+        $class = get_class($toLog);
+        while ($class) {
+            $exceptionClasses []= $class;
+            $class = get_parent_class($class);
+        }
+        $exceptionClasses = array_reverse($exceptionClasses);
+        
+        foreach ($exceptionClasses as $exceptionClass) {
+            if (isset($this->exception_sample_rates["$exceptionClass"])) {
+                $sampleRate = $this->exception_sample_rates["$exceptionClass"];
             }
         }
-        return false;
+        
+        return $sampleRate;
     }
 
     /**

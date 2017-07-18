@@ -17,7 +17,7 @@ class MockPhpStream
     
     // @codingStandardsIgnoreStart
     
-    public function stream_open($path, $mode, $options, &$opened_path)
+    public function stream_open()
     {
         return true;
     }
@@ -45,8 +45,9 @@ class MockPhpStream
     
     public function stream_write($data)
     {
-        self::$data .= $data;
+        self::$data = $data;
         self::$length = strlen(self::$data);
+        self::$index = 0;
         return self::$length;
     }
     

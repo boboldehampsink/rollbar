@@ -33,7 +33,7 @@
   "require": {
     "ext-curl": "*",
     "psr/log": "~1.0.2",
-    "packfire/php5.3-compat": "*"
+    "fluent/logger": "^1.0"
   },
 
   "require-dev": {
@@ -41,7 +41,13 @@
     "mockery/mockery": "0.9.*",
     "squizlabs/php_codesniffer": "2.*",
     "codeclimate/php-test-reporter": "dev-master",
-    "monolog/monolog": "*"
+    "monolog/monolog": "*",
+    "packfire/php5.3-compat": "*",
+    "phpmd/phpmd" : "@stable"
+  },
+
+  "suggest": {
+    "packfire/php5.3-compat": "for backward compatibility with PHP 5.3"
   },
 
   "scripts": {
@@ -51,5 +57,9 @@
     ],
     "fix": "phpcbf --standard=PSR1,PSR2 src tests"
 
+  },
+  
+  "config": {
+    "process-timeout": 600
   }
 }

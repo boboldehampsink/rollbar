@@ -7,7 +7,13 @@ use Rollbar\Payload\Data;
 use Rollbar\Payload\Level;
 use Rollbar\Payload\Message;
 use Rollbar\Payload\Payload;
-use Psr\Log\LogLevel;
+use Rollbar\RollbarLogger;
+
+use Rollbar\TestHelpers\Exceptions\SilentExceptionSampleRate;
+use Rollbar\TestHelpers\Exceptions\FiftyFiftyExceptionSampleRate;
+use Rollbar\TestHelpers\Exceptions\FiftyFityChildExceptionSampleRate;
+use Rollbar\TestHelpers\Exceptions\QuarterExceptionSampleRate;
+use Rollbar\TestHelpers\Exceptions\VerboseExceptionSampleRate;
 
 class ConfigTest extends \PHPUnit_Framework_TestCase
 {
@@ -15,7 +21,14 @@ class ConfigTest extends \PHPUnit_Framework_TestCase
 
     public function setUp()
     {
-        $this->error = new ErrorWrapper(E_ERROR, "test", null, null, null);
+        $this->error = new ErrorWrapper(
+            E_ERROR,
+            "test",
+            null,
+            null,
+            null,
+            new Utilities
+        );
     }
 
     public function tearDown()
@@ -48,12 +61,10 @@ class ConfigTest extends \PHPUnit_Framework_TestCase
     {
         $arr = array(
             "access_token" => $this->token,
-            "environment" => $this->env,
-            "dataBuilder" => "Rollbar\FakeDataBuilder",
-            "dataBuilderOptions" => array("options")
+            "environment" => $this->env
         );
         $config = new Config($arr);
-        $this->assertEquals($arr, array_pop(FakeDataBuilder::$args));
+        $this->assertInstanceOf('Rollbar\DataBuilder', $config->getDataBuilder());
     }
 
     public function testExtend()
@@ -99,7 +110,7 @@ class ConfigTest extends \PHPUnit_Framework_TestCase
             "dataBuilder" => $fdb
         );
         $config = new Config($arr);
-        $expected = array(LogLevel::EMERGENCY, "oops", array());
+        $expected = array(Level::EMERGENCY, "oops", array());
         $config->getRollbarData($expected[0], $expected[1], $expected[2]);
         $this->assertEquals($expected, array_pop(FakeDataBuilder::$logged));
     }
@@ -131,9 +142,9 @@ class ConfigTest extends \PHPUnit_Framework_TestCase
         ));
         $this->runConfigTest($c);
 
-        $c->configure(array("minimumLevel" => Level::WARNING()));
+        $c->configure(array("minimumLevel" => Level::WARNING));
         $this->runConfigTest($c);
-
+        
         $c->configure(array("minimumLevel" => Level::WARNING()->toInt()));
         $this->runConfigTest($c);
     }
@@ -146,21 +157,21 @@ class ConfigTest extends \PHPUnit_Framework_TestCase
             ->andReturn(Level::DEBUG())
             ->mock();
         $debug = new Payload($debugData, $accessToken);
-        $this->assertTrue($config->checkIgnored($debug, null, $this->error));
+        $this->assertTrue($config->checkIgnored($debug, null, $this->error, false));
 
         $criticalData = m::mock("Rollbar\Payload\Data")
             ->shouldReceive('getLevel')
             ->andReturn(Level::CRITICAL())
             ->mock();
         $critical = new Payload($criticalData, $accessToken);
-        $this->assertFalse($config->checkIgnored($critical, null, $this->error));
+        $this->assertFalse($config->checkIgnored($critical, null, $this->error, false));
 
         $warningData = m::mock("Rollbar\Payload\Data")
             ->shouldReceive('getLevel')
             ->andReturn(Level::warning())
             ->mock();
         $warning = new Payload($warningData, $accessToken);
-        $this->assertFalse($config->checkIgnored($warning, null, $this->error));
+        $this->assertFalse($config->checkIgnored($warning, null, $this->error, false));
     }
 
     public function testReportSuppressed()
@@ -188,8 +199,8 @@ class ConfigTest extends \PHPUnit_Framework_TestCase
             "environment" => $this->env,
             "filter" => $filter
         ));
-        $this->assertTrue($c->checkIgnored($p, "fake_access_token", $this->error));
-        $this->assertFalse($c->checkIgnored($p, "fake_access_token", $this->error));
+        $this->assertTrue($c->checkIgnored($p, "fake_access_token", $this->error, false));
+        $this->assertFalse($c->checkIgnored($p, "fake_access_token", $this->error, false));
     }
 
     public function testSender()
@@ -207,21 +218,278 @@ class ConfigTest extends \PHPUnit_Framework_TestCase
         ));
         $c->send($p, $this->token);
     }
+    
+    public function testEndpoint()
+    {
+        $config = new Config(array(
+            "access_token" => $this->token,
+            "environment" => $this->env,
+            "endpoint" => "http://localhost/api/1/"
+        ));
+        
+        $this->assertEquals(
+            "http://localhost/api/1/item/",
+            $config->getSender()->getEndpoint()
+        );
+    }
+    
+    public function testEndpointDefault()
+    {
+        $config = new Config(array(
+            "access_token" => $this->token,
+            "environment" => $this->env
+        ));
+        
+        $this->assertEquals(
+            "https://api.rollbar.com/api/1/item/",
+            $config->getSender()->getEndpoint()
+        );
+    }
+    
+    public function testBaseApiUrl()
+    {
+        $config = new Config(array(
+            "access_token" => $this->token,
+            "environment" => $this->env,
+            "base_api_url" => "http://localhost/api/1/"
+        ));
+        
+        $this->assertEquals(
+            "http://localhost/api/1/item/",
+            $config->getSender()->getEndpoint()
+        );
+    }
+    
+    public function testBaseApiUrlDefault()
+    {
+        $config = new Config(array(
+            "access_token" => $this->token,
+            "environment" => $this->env
+        ));
+        
+        $this->assertEquals(
+            "https://api.rollbar.com/api/1/item/",
+            $config->getSender()->getEndpoint()
+        );
+    }
+
+    public function testSendMessageTrace()
+    {
+        $c = new Config(array(
+            "access_token" => $this->token,
+            "environment" => $this->env,
+            "send_message_trace" => true
+        ));
+        
+        $this->assertTrue($c->getSendMessageTrace());
+        
+        $c = new Config(array(
+            "access_token" => $this->token,
+            "environment" => $this->env
+        ));
+        
+        $this->assertFalse($c->getSendMessageTrace());
+    }
 
     public function testCheckIgnore()
     {
         $called = false;
-        $c = new Config(array(
+        $config = new Config(array(
             "access_token" => $this->token,
             "environment" => $this->env,
             "checkIgnore" => function () use (&$called) {
                 $called = true;
             }
         ));
+        $levelFactory = $config->getLevelFactory();
+        
         $data = new Data($this->env, new Body(new Message("test")));
-        $data->setLevel(Level::fromName('error'));
-        $c->checkIgnored(new Payload($data, $c->getAccessToken()), $this->token, $this->error);
+        $data->setLevel($levelFactory->fromName(Level::ERROR));
+        
+        $config->checkIgnored(
+            new Payload(
+                $data,
+                $config->getAccessToken()
+            ),
+            $this->token,
+            $this->error,
+            false
+        );
 
         $this->assertTrue($called);
+    }
+
+    public function testCheckIgnoreParameters()
+    {
+        $called = false;
+        $isUncaughtPassed = null;
+        $errorPassed = null;
+        
+        $config = new Config(array(
+            "access_token" => $this->token,
+            "environment" => $this->env,
+            "checkIgnore" => function (
+                $isUncaught,
+                $exc
+            ) use (
+                &$called,
+                &$isUncaughtPassed,
+                &$errorPassed
+) {
+                $called = true;
+                $isUncaughtPassed = $isUncaught;
+                $errorPassed = $exc;
+            }
+        ));
+        
+        $levelFactory = $config->getLevelFactory();
+        
+        $data = new Data($this->env, new Body(new Message("test")));
+        $data->setLevel($levelFactory->fromName(Level::ERROR));
+        
+        $config->checkIgnored(
+            new Payload(
+                $data,
+                $config->getAccessToken()
+            ),
+            $this->token,
+            $this->error,
+            true
+        );
+
+        $this->assertTrue($called);
+        $this->assertTrue($isUncaughtPassed);
+        $this->assertEquals($this->error, $errorPassed);
+    }
+    
+    public function testCaptureErrorStacktraces()
+    {
+        $logger = new RollbarLogger(array(
+            "access_token" => $this->token,
+            "environment" => $this->env,
+            "capture_error_stacktraces" => false
+        ));
+        
+        $dataBuilder = $logger->getDataBuilder();
+        
+        $result = $dataBuilder->makeData(
+            Level::ERROR,
+            new \Exception(),
+            array()
+        );
+        
+        $this->assertEmpty($result->getBody()->getValue()->getFrames());
+    }
+
+    /**
+     * @dataProvider useErrorReportingProvider
+     */
+    public function testUseErrorReporting($use_error_reporting, $error_reporting, $expected)
+    {
+        $called = false;
+        
+        $config = new Config(array(
+            "access_token" => $this->token,
+            "environment" => $this->env,
+            "checkIgnore" => function () use (&$called) {
+                $called = true;
+            },
+            "use_error_reporting" => $use_error_reporting
+        ));
+        
+        $levelFactory = $config->getLevelFactory();
+        
+        $data = new Data($this->env, new Body(new Message("test")));
+        $data->setLevel($levelFactory->fromName(Level::ERROR));
+        
+        if ($error_reporting !== null) {
+            $errorReportingTemp = error_reporting();
+            error_reporting($error_reporting);
+        }
+        
+        $result = $config->checkIgnored(
+            new Payload(
+                $data,
+                $config->getAccessToken()
+            ),
+            $this->token,
+            $this->error,
+            false
+        );
+        
+        $this->assertEquals($expected, $result);
+        
+        if ($error_reporting) {
+            error_reporting($errorReportingTemp);
+        }
+    }
+    
+    public function useErrorReportingProvider()
+    {
+        return array(
+            "use_error_reporting off" => array(
+                false, // "use_error_reporting"
+                null,  // "error_reporting"
+                false
+            ),
+            "use_error_reporting on & errno not covered" => array(
+                true,      // "use_error_reporting"
+                E_WARNING, // "error_reporting"
+                true
+            ),
+            "use_error_reporting on & errno covered" => array(
+                true,    // "use_error_reporting"
+                E_ERROR, // "error_reporting"
+                false
+            )
+        );
+    }
+    
+    /**
+     * @dataProvider providerExceptionSampleRate
+     */
+    public function testExceptionSampleRate($exception, $expected)
+    {
+        $config = new Config(array(
+            "access_token" => "ad865e76e7fb496fab096ac07b1dbabb",
+            "environment" => "testing-php",
+            "exception_sample_rates" => array(
+                get_class($exception) => $expected
+            )
+        ));
+        
+        $sampleRate = $config->exceptionSampleRate($exception);
+        
+        $this->assertEquals($expected, $sampleRate);
+    }
+    
+    public function providerExceptionSampleRate()
+    {
+        return array(
+            array(
+                new \Exception,
+                1.0
+            ),
+            array(
+                new SilentExceptionSampleRate,
+                0.0
+            ),
+            array(
+                new FiftyFiftyExceptionSampleRate,
+                0.5
+            ),
+            array(
+                new FiftyFityChildExceptionSampleRate,
+                0.5
+            ),
+            array(
+                new QuarterExceptionSampleRate,
+                0.25
+            ),
+            array(
+                new VerboseExceptionSampleRate,
+                1.0
+            ),
+        );
     }
 }

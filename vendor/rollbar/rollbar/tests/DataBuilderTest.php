@@ -16,16 +16,300 @@ class DataBuilderTest extends \PHPUnit_Framework_TestCase
     public function setUp()
     {
         $_SESSION = array();
+        
         $this->dataBuilder = new DataBuilder(array(
             'accessToken' => 'abcd1234efef5678abcd1234567890be',
-            'environment' => 'tests'
+            'environment' => 'tests',
+            'levelFactory' => new LevelFactory,
+            'utilities' => new Utilities
         ));
     }
 
     public function testMakeData()
     {
-        $output = $this->dataBuilder->makeData(Level::fromName('error'), "testing", array());
+        $output = $this->dataBuilder->makeData(Level::ERROR, "testing", array());
         $this->assertEquals('tests', $output->getEnvironment());
+    }
+    
+    /**
+     * @dataProvider getUrlProvider
+     */
+    public function testGetUrl($protoData, $hostData, $portData)
+    {
+        // Set up proto
+        $pre_SERVER = $_SERVER;
+        
+        $_SERVER = array_merge(
+            $_SERVER,
+            $protoData[0],
+            $hostData[0],
+            $portData[0]
+        );
+        $expectedProto = $protoData[1];
+        $expectedHost = $hostData[1];
+        $expectedPort = $portData[1];
+        $expectedPort = ($expectedPort == 80 || $expectedPort == 443) ? "" : $expectedPort;
+        
+        $expected = '';
+        $expected = $expectedProto . "://" . $expectedHost .
+                    ($expectedPort ? $expected  . ':' . $expectedPort : $expected) .
+                    '/';
+                    
+        if ($expectedHost == 'unknown') {
+            $expected = null;
+        }
+        
+        // When DataBuilder builds the data
+        $response = $this->dataBuilder->makeData(Level::ERROR, "testing", array());
+        $result = $response->getRequest()->getUrl();
+        
+        $_SERVER = $pre_SERVER;
+        
+        $this->assertEquals($expected, $result);
+    }
+    
+    public function getUrlProvider()
+    {
+        $protoData = $this->getUrlProtoProvider();
+        $hostData = $this->getUrlHostProvider();
+        $portData = $this->getUrlPortProvider();
+        
+        $testData = array();
+        
+        $dataName = 0;
+        
+        foreach ($protoData as $protoTest) {
+            foreach ($hostData as $hostTest) {
+                foreach ($portData as $portTest) {
+                    if ($dataName >= 96 && $dataName <= 99) {
+                        continue;
+                    }
+                    
+                    $testData []= array(
+                        $protoTest, // test param 1
+                        $hostTest, // test param 2
+                        $portTest // test param 3,
+                    );
+                    
+                    $dataName++;
+                }
+            }
+        }
+        
+        return $testData;
+    }
+    
+    /**
+     * @dataProvider parseForwardedStringProvider
+     */
+    public function testParseForwardedString($forwaded, $expected)
+    {
+        $output = $this->dataBuilder->parseForwardedString($forwaded);
+        $this->assertEquals($expected, $output);
+    }
+    
+    public function parseForwardedStringProvider()
+    {
+        return array(
+            array( // test 1
+                'Forwarded: for="_mdn" ',
+                array(
+                    'for' => array('"_mdn"')
+                )
+            ),
+            array( // test 2
+                'Forwarded: for="_mdn", for="_mdn2" ',
+                array(
+                    'for' => array('"_mdn"', '"_mdn2"')
+                )
+            ),
+            array( // test 3
+                'Forwarded: For="[2001:db8:cafe::17]:4711"',
+                array(
+                    'for' => array('"[2001:db8:cafe::17]:4711"')
+                )
+            ),
+            array( // test 4
+                'Forwarded: for=192.0.2.60; proto=http; by=203.0.113.43',
+                array(
+                    'for' => array('192.0.2.60'),
+                    'by' => array('203.0.113.43'),
+                    'proto' => 'http'
+                )
+            ),
+            array( // test 5
+                'Forwarded: for=192.0.2.43, for=198.51.100.17;'.
+                           'by=192.0.2.44, by=198.51.100.18',
+                array(
+                    'for' => array('192.0.2.43','198.51.100.17'),
+                    'by' => array('192.0.2.44','198.51.100.18')
+                )
+            ),
+            array( // test 6
+                'Forwarded: for=192.0.2.60; host=hostname; by=203.0.113.43; proto=https',
+                array(
+                    'for' => array('192.0.2.60'),
+                    'by' => array('203.0.113.43'),
+                    'host' => 'hostname',
+                    'proto' => 'https'
+                )
+            )
+        );
+    }
+    
+    /**
+     * @dataProvider getUrlProtoProvider
+     */
+    public function testGetUrlProto($data, $expected)
+    {
+        $pre_SERVER = $_SERVER;
+        $_SERVER = array_merge($_SERVER, $data);
+        
+        $output = $this->dataBuilder->getUrlProto();
+        
+        $this->assertEquals($expected, $output);
+        
+        $_SERVER = $pre_SERVER;
+    }
+    
+    public function getUrlProtoProvider()
+    {
+        return array(
+            array( // test 1: HTTP_FORWARDED
+                array(
+                    'HTTP_FORWARDED' => 'Forwarded: for=192.0.2.60; proto=http; by=203.0.113.43',
+                ),
+                'http'
+            ),
+            array( // test 2: HTTP_X_FORWARDED
+                array(
+                    'HTTP_X_FORWARDED_PROTO' => 'http',
+                ),
+                'http'
+            ),
+            array( // test 2: HTTP_X_FORWARDED with commas
+                array(
+                    'HTTP_X_FORWARDED_PROTO' => 'http,https',
+                ),
+                'http'
+            ),
+            array( // test 3: HTTPS server global
+                array(
+                    'HTTPS' => 'on',
+                ),
+                'https'
+            ),
+            array( // test 4: default
+                array(),
+                'http'
+            ),
+            array( // test 5: HTTP_FORWARDED https
+                array(
+                    'HTTP_FORWARDED' => 'Forwarded: for=192.0.2.60; proto=https; by=203.0.113.43',
+                ),
+                'https'
+            ),
+        );
+    }
+    
+    /**
+     * @dataProvider getUrlHostProvider
+     */
+    public function testGetUrlHost($data, $expected)
+    {
+        $pre_SERVER = $_SERVER;
+        $_SERVER = array_merge($_SERVER, $data);
+        
+        $output = $this->dataBuilder->getUrlHost();
+        
+        $_SERVER = $pre_SERVER;
+        
+        $this->assertEquals($expected, $output);
+    }
+    
+    public function getUrlHostProvider()
+    {
+        return array(
+            array( // test 1: HTTP_FORWARDED
+                array(
+                    'HTTP_FORWARDED' => 'Forwarded: for=192.0.2.60; host=test-hostname.com; by=203.0.113.43',
+                ),
+                'test-hostname.com'
+            ),
+            array( // test 2: HTTP_X_FORWARDED
+                array(
+                    'HTTP_X_FORWARDED_HOST' => 'test-hostname.com',
+                ),
+                'test-hostname.com'
+            ),
+            array( // test 3: HTTP_HOST server global
+                array(
+                    'HTTP_HOST' => 'test-hostname.com',
+                ),
+                'test-hostname.com'
+            ),
+            array( // test 4: default
+                array(),
+                'unknown'
+            ),
+            array( // test 5: SERVER_name
+                array(
+                    'SERVER_NAME' => 'test-hostname.com',
+                ),
+                'test-hostname.com'
+            ),
+            array( // test 6: HTTP_HOST server global with port
+                array(
+                    'HTTP_HOST' => 'test-hostname.com:8080',
+                ),
+                'test-hostname.com'
+            ),
+        );
+    }
+    
+    /**
+     * @dataProvider getUrlPortProvider
+     */
+    public function testGetUrlPort($data, $expected)
+    {
+        $pre_SERVER = $_SERVER;
+        $_SERVER = array_merge($_SERVER, $data);
+        
+        $output = $this->dataBuilder->getUrlPort(
+            isset($_SERVER['$proto']) ? $_SERVER['$proto'] : null
+        );
+        
+        $_SERVER = $pre_SERVER;
+        
+        $this->assertEquals($expected, $output);
+    }
+    
+    public function getUrlPortProvider()
+    {
+        return array(
+            array( // test 1: HTTP_X_FORWARDED
+                array(
+                    'HTTP_X_FORWARDED_PORT' => '8080',
+                ),
+                8080
+            ),
+            array( // test 2: SERVER_PORT server global
+                array(
+                    'SERVER_PORT' => '8080',
+                ),
+                8080
+            ),
+            array( // test 3: default
+                array(),
+                80
+            ),
+            array( // test 4: $proto param
+                array(
+                    '$proto' => 'https',
+                ),
+                443
+            )
+        );
     }
 
     public function testBranchKey()
@@ -33,10 +317,12 @@ class DataBuilderTest extends \PHPUnit_Framework_TestCase
         $dataBuilder = new DataBuilder(array(
             'accessToken' => 'abcd1234efef5678abcd1234567890be',
             'environment' => 'tests',
-            'branch' => 'test-branch'
+            'branch' => 'test-branch',
+            'levelFactory' => new LevelFactory,
+            'utilities' => new Utilities
         ));
 
-        $output = $dataBuilder->makeData(Level::fromName('error'), "testing", array());
+        $output = $dataBuilder->makeData(Level::ERROR, "testing", array());
         $this->assertEquals('test-branch', $output->getServer()->getBranch());
     }
 
@@ -45,9 +331,11 @@ class DataBuilderTest extends \PHPUnit_Framework_TestCase
         $dataBuilder = new DataBuilder(array(
             'accessToken' => 'abcd1234efef5678abcd1234567890be',
             'environment' => 'tests',
-            'code_version' => '3.4.1'
+            'code_version' => '3.4.1',
+            'levelFactory' => new LevelFactory,
+            'utilities' => new Utilities
         ));
-        $output = $dataBuilder->makeData(Level::fromName('error'), "testing", array());
+        $output = $dataBuilder->makeData(Level::ERROR, "testing", array());
         $this->assertEquals('3.4.1', $output->getCodeVersion());
     }
 
@@ -56,32 +344,213 @@ class DataBuilderTest extends \PHPUnit_Framework_TestCase
         $dataBuilder = new DataBuilder(array(
             'accessToken' => 'abcd1234efef5678abcd1234567890be',
             'environment' => 'tests',
-            'host' => 'my host'
+            'host' => 'my host',
+            'levelFactory' => new LevelFactory,
+            'utilities' => new Utilities
         ));
-        $output = $dataBuilder->makeData(Level::fromName('error'), "testing", array());
+        $output = $dataBuilder->makeData(Level::ERROR, "testing", array());
         $this->assertEquals('my host', $output->getServer()->getHost());
     }
-
-    public function testFramesWithoutContext()
+    
+    public function testGetMessage()
     {
         $dataBuilder = new DataBuilder(array(
             'accessToken' => 'abcd1234efef5678abcd1234567890be',
             'environment' => 'tests',
-            'include_error_code_context' => false
+            'levelFactory' => new LevelFactory,
+            'utilities' => new Utilities
         ));
-        $output = $dataBuilder->makeFrames(new \Exception());
+        
+        $result = $dataBuilder->makeData(Level::ERROR, "testing", array());
+        $this->assertNull($result->getBody()->getValue()->getBacktrace());
+    }
+    
+    public function testGetMessageSendMessageTrace()
+    {
+        
+        $dataBuilder = new DataBuilder(array(
+            'accessToken' => 'abcd1234efef5678abcd1234567890be',
+            'environment' => 'tests',
+            'send_message_trace' => true,
+            'levelFactory' => new LevelFactory,
+            'utilities' => new Utilities
+        ));
+    
+        $result = $dataBuilder->makeData(Level::ERROR, "testing", array());
+        $this->assertNotEmpty($result->getBody()->getValue()->getBacktrace());
+    }
+    
+    public function testGetMessageTraceArguments()
+    {
+        // Negative test
+        $c = new Config(array(
+            'access_token' => 'abcd1234efef5678abcd1234567890be',
+            'environment' => 'tests',
+            'send_message_trace' => true
+        ));
+        $dataBuilder = $c->getDataBuilder();
+    
+        $result = $dataBuilder->makeData(Level::ERROR, 'testing', array());
+        $frames = $result->getBody()->getValue()->getBacktrace();
+        
+        $this->assertArrayNotHasKey(
+            'args',
+            $frames[0],
+            "Arguments in stack frames included when they should have not been."
+        );
+        
+        // Positive test
+        $c = new Config(array(
+            'access_token' => 'abcd1234efef5678abcd1234567890be',
+            'environment' => 'tests',
+            'send_message_trace' => true,
+            'local_vars_dump' => true
+        ));
+        $dataBuilder = $c->getDataBuilder();
+    
+        $expected = 'testing';
+        $result = $dataBuilder->makeData(Level::ERROR, $expected, array());
+        $frames = $result->getBody()->getValue()->getBacktrace();
+        
+        $this->assertEquals(
+            $expected,
+            $frames[0]['args'][0],
+            "Arguments in stack frames NOT included when they should be."
+        );
+    }
+    
+    public function testExceptionTraceArguments()
+    {
+        // Negative test
+        $dataBuilder = new DataBuilder(array(
+            'accessToken' => 'abcd1234efef5678abcd1234567890be',
+            'environment' => 'tests',
+            'levelFactory' => new LevelFactory,
+            'utilities' => new Utilities
+        ));
+        $ex = $this->exceptionTraceArgsHelper('trace args message');
+        $frames = $dataBuilder->getExceptionTrace($ex)->getFrames();
+        $this->assertNull(
+            $frames[count($frames)-1]->getArgs(),
+            "Frames arguments available in trace when they should not be."
+        );
+        
+        // Positive test
+        $dataBuilder = new DataBuilder(array(
+            'accessToken' => 'abcd1234efef5678abcd1234567890be',
+            'environment' => 'tests',
+            'local_vars_dump' => true,
+            'levelFactory' => new LevelFactory,
+            'utilities' => new Utilities
+        ));
+        $expected = 'trace args message';
+        $ex = $this->exceptionTraceArgsHelper($expected);
+        $frames = $dataBuilder->getExceptionTrace($ex)->getFrames();
+        $args = $frames[count($frames)-1]->getArgs();
+        
+        $this->assertEquals(
+            $expected,
+            $args[0],
+            "Frames arguments NOT available in trace when they should be."
+        );
+    }
+    
+    private function exceptionTraceArgsHelper($message)
+    {
+        return new \Exception($message);
+    }
+
+    public function testExceptionFramesWithoutContext()
+    {
+        $dataBuilder = new DataBuilder(array(
+            'accessToken' => 'abcd1234efef5678abcd1234567890be',
+            'environment' => 'tests',
+            'include_error_code_context' => true,
+            'include_exception_code_context' => false,
+            'levelFactory' => new LevelFactory,
+            'utilities' => new Utilities
+        ));
+        $output = $dataBuilder->getExceptionTrace(new \Exception())->getFrames();
+        $this->assertNull($output[1]->getContext());
+    }
+
+    public function testExceptionFramesWithoutContextDefault()
+    {
+        $dataBuilder = new DataBuilder(array(
+            'accessToken' => 'abcd1234efef5678abcd1234567890be',
+            'environment' => 'tests',
+            'levelFactory' => new LevelFactory,
+            'utilities' => new Utilities
+        ));
+        $output = $dataBuilder->getExceptionTrace(new \Exception())->getFrames();
+        $this->assertNull($output[1]->getContext());
+    }
+
+    public function testExceptionFramesWithContext()
+    {
+        $dataBuilder = new DataBuilder(array(
+            'accessToken' => 'abcd1234efef5678abcd1234567890be',
+            'environment' => 'tests',
+            'include_exception_code_context' => true,
+            'levelFactory' => new LevelFactory,
+            'utilities' => new Utilities
+        ));
+        $output = $dataBuilder->getExceptionTrace(new \Exception())->getFrames();
+        $this->assertNotEmpty($output[count($output)-2]->getContext());
+    }
+
+    public function testFramesWithoutContext()
+    {
+        $utilities = new Utilities;
+        
+        $dataBuilder = new DataBuilder(array(
+            'accessToken' => 'abcd1234efef5678abcd1234567890be',
+            'environment' => 'tests',
+            'include_error_code_context' => false,
+            'include_exception_code_context' => true,
+            'levelFactory' => new LevelFactory,
+            'utilities' => $utilities
+        ));
+        $testFilePath = __DIR__ . '/DataBuilderTest.php';
+        $backtrace = array(
+            array(
+                'file' => $testFilePath,
+                'function' => 'testFramesWithoutContext',
+                'line' => 42
+            ),
+            array(
+                'file' => $testFilePath,
+                'function' => 'testFramesWithContext',
+                'line' => 99
+            ),
+        );
+        $output = $dataBuilder->getErrorTrace(
+            new ErrorWrapper(
+                E_ERROR,
+                'bork',
+                null,
+                null,
+                $backtrace,
+                $utilities
+            )
+        )->getFrames();
+        
         $this->assertNull($output[0]->getContext());
     }
 
     public function testFramesWithContext()
     {
+        $utilities = new Utilities;
 
         $testFilePath = __DIR__ . '/DataBuilderTest.php';
 
         $dataBuilder = new DataBuilder(array(
             'accessToken' => 'abcd1234efef5678abcd1234567890be',
             'environment' => 'tests',
-            'include_error_code_context' => true
+            'include_error_code_context' => true,
+            'include_exception_code_context' => false,
+            'levelFactory' => new LevelFactory,
+            'utilities' => $utilities
         ));
 
         $backTrace = array(
@@ -111,8 +580,17 @@ class DataBuilderTest extends \PHPUnit_Framework_TestCase
         }
         fclose($file);
 
-        $output = $dataBuilder->makeFrames(new ErrorWrapper(null, null, null, null, $backTrace));
-        $pre = $output[0]->getContext()->getPre();
+        $output = $dataBuilder->getErrorTrace(
+            new ErrorWrapper(
+                E_ERROR,
+                'bork',
+                null,
+                null,
+                $backTrace,
+                $utilities
+            )
+        )->getFrames();
+        $pre = $output[1]->getContext()->getPre();
 
         $expected = array();
         $fileContent = file($backTrace[0]['file']);
@@ -127,6 +605,59 @@ class DataBuilderTest extends \PHPUnit_Framework_TestCase
         );
     }
 
+    public function testFramesWithoutContextDefault()
+    {
+        $testFilePath = __DIR__ . '/DataBuilderTest.php';
+        
+        $utilities = new Utilities;
+
+        $dataBuilder = new DataBuilder(array(
+            'accessToken' => 'abcd1234efef5678abcd1234567890be',
+            'environment' => 'tests',
+            'levelFactory' => new LevelFactory,
+            'utilities' => $utilities
+        ));
+
+        $backTrace = array(
+            array(
+                'file' => $testFilePath,
+                'function' => 'testFramesWithoutContext'
+            ),
+            array(
+                'file' => $testFilePath,
+                'function' => 'testFramesWithContext'
+            ),
+        );
+
+        $file = fopen($testFilePath, 'r');
+        $lineNumber = 0;
+        while (!feof($file)) {
+            $lineNumber++;
+            $line = fgets($file);
+
+            if ($line == '    public function testFramesWithoutContext()
+') {
+                $backTrace[0]['line'] = $lineNumber;
+            } elseif ($line == '    public function testFramesWithContext()
+') {
+                $backTrace[1]['line'] = $lineNumber;
+            }
+        }
+        fclose($file);
+
+        $output = $dataBuilder->getErrorTrace(
+            new ErrorWrapper(
+                E_ERROR,
+                'bork',
+                null,
+                null,
+                $backTrace,
+                $utilities
+            )
+        )->getFrames();
+        $this->assertNull($output[0]->getContext());
+    }
+
     public function testPerson()
     {
         $dataBuilder = new DataBuilder(array(
@@ -135,9 +666,11 @@ class DataBuilderTest extends \PHPUnit_Framework_TestCase
             'person' => array(
                 'id' => '123',
                 'email' => 'test@test.com'
-            )
+            ),
+            'levelFactory' => new LevelFactory,
+            'utilities' => new Utilities
         ));
-        $output = $dataBuilder->makeData(Level::fromName('error'), "testing", array());
+        $output = $dataBuilder->makeData(Level::ERROR, "testing", array());
         $this->assertEquals('test@test.com', $output->getPerson()->getEmail());
     }
 
@@ -151,24 +684,28 @@ class DataBuilderTest extends \PHPUnit_Framework_TestCase
                     'id' => '123',
                     'email' => 'test@test.com'
                 );
-            }
+            },
+            'levelFactory' => new LevelFactory,
+            'utilities' => new Utilities
         ));
-        $output = $dataBuilder->makeData(Level::fromName('error'), "testing", array());
+        $output = $dataBuilder->makeData(Level::ERROR, "testing", array());
         $this->assertEquals('test@test.com', $output->getPerson()->getEmail());
     }
     
     public function testPersonFuncException()
     {
-        $logger = \Rollbar\Rollbar::scope(array(
+        \Rollbar\Rollbar::init(array(
             'access_token' => 'abcd1234efef5678abcd1234567890be',
-            'environment' => 'tests',
+            'environment' => 'tests'
+        ));
+        $logger = \Rollbar\Rollbar::scope(array(
             'person_fn' => function () {
                 throw new \Exception("Exception from person_fn");
             }
         ));
         
         try {
-            $logger->log(Level::fromName('error'), "testing exceptions in person_fn", array());
+            $logger->log(Level::ERROR, "testing exceptions in person_fn", array());
             $this->assertTrue(true); // assert that exception was not thrown
         } catch (\Exception $exception) {
             $this->fail("Exception in person_fn was not caught.");
@@ -180,331 +717,14 @@ class DataBuilderTest extends \PHPUnit_Framework_TestCase
         $dataBuilder = new DataBuilder(array(
             'accessToken' => 'abcd1234efef5678abcd1234567890be',
             'environment' => 'tests',
-            'root' => '/var/www/app'
+            'root' => '/var/www/app',
+            'levelFactory' => new LevelFactory,
+            'utilities' => new Utilities
         ));
-        $output = $dataBuilder->makeData(Level::fromName('error'), "testing", array());
+        $output = $dataBuilder->makeData(Level::ERROR, "testing", array());
         $this->assertEquals('/var/www/app', $output->getServer()->getRoot());
     }
 
-    public function scrubUrlDataProvider()
-    {
-        return array(
-            'nothing to scrub' => array(
-                'https://rollbar.com', // $testData
-                array(), // $scrubfields
-                'https://rollbar.com' // $expected
-            ),
-            'mix of scrub and no scrub' => array(
-                'https://rollbar.com?arg1=val1&arg2=val2&arg3=val3', // $testData
-                array('arg2'), // $scrubFields
-                'https://rollbar.com?arg1=val1&arg2=xxxxxxxx&arg3=val3' // $expected
-            ),
-        );
-    }
-    
-    /**
-     * @dataProvider scrubDataProvider
-     */
-    public function testScrub($testData, $scrubFields, $expected)
-    {
-        $dataBuilder = new DataBuilder(array(
-            'accessToken' => 'abcd1234efef5678abcd1234567890be',
-            'environment' => 'tests',
-            'scrubFields' => $scrubFields
-        ));
-        $result = $dataBuilder->scrub($testData);
-        $this->assertEquals($expected, $result, "Looks like some fields did not get scrubbed correctly.");
-    }
-    
-    public function scrubDataProvider()
-    {
-        return array_merge(array(
-            'flat data array' =>
-                $this->scrubFlatDataProvider(),
-            'recursive data array' =>
-                $this->scrubRecursiveDataProvider(),
-            'string encoded values' =>
-                $this->scrubFlatStringDataProvider(),
-            'string encoded recursive values' =>
-                $this->scrubRecursiveStringDataProvider(),
-            'string encoded recursive values in recursive array' =>
-                $this->scrubRecursiveStringRecursiveDataProvider()
-        ), $this->scrubUrlDataProvider(), $this->scrubJSONNumbersProvider());
-    }
-
-    private function scrubJSONNumbersProvider()
-    {
-        return array(
-            'plain array' => array(
-                  '[1023,1924]',
-                  array(
-                      'sensitive'
-                  ),
-                  '[1023,1924]'
-            ),
-            'param equals array' => array(
-                'b=[1023,1924]',
-                array(
-                    'sensitive'
-                ),
-                'b=%5B1023%2C1924%5D'
-            )
-        );
-    }
-
-    private function scrubFlatDataProvider()
-    {
-        return array(
-            array( // $testData
-                'non sensitive data' => '123',
-                'sensitive data' => '456'
-            ),
-            array( // $scrubFields
-                'sensitive data'
-            ),
-            array( // $expected
-                'non sensitive data' => '123',
-                'sensitive data' => '********'
-            )
-        );
-    }
-    
-    private function scrubRecursiveDataProvider()
-    {
-        return array(
-            array( // $testData
-                'non sensitive data 1' => '123',
-                'non sensitive data 2' => '456',
-                'non sensitive data 3' => '4&56',
-                'non sensitive data 4' => 'a=4&56',
-                'non sensitive data 6' => 'baz&foo=bar',
-                'sensitive data' => '456',
-                array(
-                    'non sensitive data 3' => '789',
-                    'non sensitive data 5' => '789&5=',
-                    'recursive sensitive data' => 'qwe',
-                    'non sensitive data 3' => 'rty',
-                    array(
-                        'recursive sensitive data' => array(),
-                    )
-                ),
-            ),
-            array( // $scrubFields
-                'sensitive data',
-                'recursive sensitive data',
-                'foo'
-            ),
-            array( // $expected
-                'non sensitive data 1' => '123',
-                'non sensitive data 2' => '456',
-                'non sensitive data 3' => '4&56',
-                'non sensitive data 4' => 'a=4&56=', // this is a weird edge case
-                'non sensitive data 6' => 'baz=&foo=xxxxxxxx',
-                'sensitive data' => '********',
-                array(
-                    'non sensitive data 3' => '789',
-                    'non sensitive data 5' => '789&5=',
-                    'recursive sensitive data' => '********',
-                    'non sensitive data 3' => 'rty',
-                    array(
-                        'recursive sensitive data' => '********',
-                    )
-                ),
-            ),
-        );
-    }
-    
-    private function scrubFlatStringDataProvider()
-    {
-        return array(
-            // $testData
-            http_build_query(
-                array(
-                    'arg1' => 'val 1',
-                    'sensitive' => 'scrubit',
-                    'arg2' => 'val 3'
-                )
-            ),
-            array( // $scrubFields
-                'sensitive'
-            ),
-            // $expected
-            http_build_query(
-                array(
-                    'arg1' => 'val 1',
-                    'sensitive' => 'xxxxxxxx',
-                    'arg2' => 'val 3'
-                )
-            ),
-        );
-    }
-    
-    private function scrubRecursiveStringDataProvider()
-    {
-        return array(
-            // $testData
-            http_build_query(
-                array(
-                    'arg1' => 'val 1',
-                    'sensitive' => 'scrubit',
-                    'arg2' => array(
-                        'arg3' => 'val 3',
-                        'sensitive' => 'scrubit'
-                    )
-                )
-            ),
-            array( // $scrubFields
-                'sensitive'
-            ),
-            // $expected
-            http_build_query(
-                array(
-                    'arg1' => 'val 1',
-                    'sensitive' => 'xxxxxxxx',
-                    'arg2' => array(
-                        'arg3' => 'val 3',
-                        'sensitive' => 'xxxxxxxx'
-                    )
-                )
-            ),
-        );
-    }
-    
-    private function scrubRecursiveStringRecursiveDataProvider()
-    {
-        return array(
-            array( // $testData
-                'non sensitive data 1' => '123',
-                'non sensitive data 2' => '456',
-                'sensitive data' => '456',
-                array(
-                    'non sensitive data 3' => '789',
-                    'recursive sensitive data' => 'qwe',
-                    'non sensitive data 3' => http_build_query(
-                        array(
-                            'arg1' => 'val 1',
-                            'sensitive' => 'scrubit',
-                            'arg2' => array(
-                                'arg3' => 'val 3',
-                                'sensitive' => 'scrubit'
-                            )
-                        )
-                    ),
-                    array(
-                        'recursive sensitive data' => array(),
-                    )
-                ),
-            ),
-            array( // $scrubFields
-                'sensitive data',
-                'recursive sensitive data',
-                'sensitive'
-            ),
-            array( // $expected
-                'non sensitive data 1' => '123',
-                'non sensitive data 2' => '456',
-                'sensitive data' => '********',
-                array(
-                    'non sensitive data 3' => '789',
-                    'recursive sensitive data' => '********',
-                    'non sensitive data 3' => http_build_query(
-                        array(
-                            'arg1' => 'val 1',
-                            'sensitive' => 'xxxxxxxx',
-                            'arg2' => array(
-                                'arg3' => 'val 3',
-                                'sensitive' => 'xxxxxxxx'
-                            )
-                        )
-                    ),
-                    array(
-                        'recursive sensitive data' => '********',
-                    )
-                ),
-            )
-        );
-    }
-
-    /**
-     * @dataProvider scrubArrayDataProvider
-     */
-    public function testScrubArray($testData, $scrubFields, $expected)
-    {
-        $dataBuilder = new DataBuilder(array(
-            'accessToken' => 'abcd1234efef5678abcd1234567890be',
-            'environment' => 'tests',
-            'scrubFields' => $scrubFields
-        ));
-        $result = $dataBuilder->scrub($testData);
-        $this->assertEquals($expected, $result, "Looks like some fields did not get scrubbed correctly.");
-    }
-
-    public function scrubArrayDataProvider()
-    {
-        return array(
-            'flat data array' => array(
-                array( // $testData
-                    'non sensitive data' => '123',
-                    'sensitive data' => '456'
-                ),
-                array( // $scrubFields
-                    'sensitive data'
-                ),
-                array( // $expected
-                    'non sensitive data' => '123',
-                    'sensitive data' => '********'
-                )
-            ),
-            'recursive data array' => array(
-                array( // $testData
-                    'non sensitive data 1' => '123',
-                    'non sensitive data 2' => '456',
-                    'sensitive data' => '456',
-                    array(
-                        'non sensitive data 3' => '789',
-                        'recursive sensitive data' => 'qwe',
-                        'non sensitive data 3' => 'rty',
-                        array(
-                            'recursive sensitive data' => array(),
-                        )
-                    ),
-                ),
-                array( // $scrubFields
-                    'sensitive data',
-                    'recursive sensitive data'
-                ),
-                array( // $expected
-                    'non sensitive data 1' => '123',
-                    'non sensitive data 2' => '456',
-                    'sensitive data' => '********',
-                    array(
-                        'non sensitive data 3' => '789',
-                        'recursive sensitive data' => '********',
-                        'non sensitive data 3' => 'rty',
-                        array(
-                            'recursive sensitive data' => '********',
-                        )
-                    ),
-                ),
-            )
-        );
-    }
-
-    public function testScrubReplacement()
-    {
-        $testData = array('scrubit' => '123');
-        
-        $dataBuilder = new DataBuilder(array(
-            'accessToken' => 'abcd1234efef5678abcd1234567890be',
-            'environment' => 'tests',
-            'scrubFields' => array('scrubit')
-        ));
-        
-        $result = $dataBuilder->scrub($testData, "@");
-
-        $this->assertEquals("@@@@@@@@", $result['scrubit']);
-    }
-    
     public function testSetRequestBody()
     {
         $_POST['arg1'] = "val1";
@@ -518,13 +738,96 @@ class DataBuilderTest extends \PHPUnit_Framework_TestCase
         
         $dataBuilder = new DataBuilder(array(
             'accessToken' => 'abcd1234efef5678abcd1234567890be',
-            'environment' => 'tests'
+            'environment' => 'tests',
+            'levelFactory' => new LevelFactory,
+            'utilities' => new Utilities,
+            'include_raw_request_body' => true,
         ));
-        $output = $dataBuilder->makeData(Level::fromName('error'), "testing", array());
+        $output = $dataBuilder->makeData(Level::ERROR, "testing", array());
         $requestBody = $output->getRequest()->getBody();
         
         $this->assertEquals($streamInput, $requestBody);
+        if (version_compare(PHP_VERSION, '5.6.0') < 0) {
+            $this->assertEquals($streamInput, $_SERVER['php://input']);
+        }
         
         stream_wrapper_restore("php");
+    }
+    
+    public function testGenerateErrorWrapper()
+    {
+        $result = $this->dataBuilder->generateErrorWrapper(E_ERROR, 'bork', null, null);
+        
+        $this->assertTrue($result instanceof ErrorWrapper);
+    }
+
+    /**
+     * @dataProvider captureErrorStacktracesProvider
+     */
+    public function testCaptureErrorStacktracesException(
+        $captureErrorStacktraces,
+        $expected
+    ) {
+    
+        $dataBuilder = new DataBuilder(array(
+            'accessToken' => 'abcd1234efef5678abcd1234567890be',
+            'environment' => 'tests',
+            'capture_error_stacktraces' => $captureErrorStacktraces,
+            'levelFactory' => new LevelFactory,
+            'utilities' => new Utilities
+        ));
+        
+        $result = $dataBuilder->makeData(
+            Level::ERROR,
+            new \Exception(),
+            array()
+        );
+        $frames = $result->getBody()->getValue()->getFrames();
+        
+        $this->assertEquals($expected, count($frames) === 0);
+    }
+    
+    public function testFramesOrder()
+    {
+        $dataBuilder = new DataBuilder(array(
+            'accessToken' => 'abcd1234efef5678abcd1234567890be',
+            'environment' => 'tests',
+            'include_exception_code_context' => true,
+            'levelFactory' => new LevelFactory,
+            'utilities' => new Utilities
+        ));
+        $frames = $dataBuilder->makeFrames(new \Exception(), false);
+        $this->assertEquals('<main>', $frames[count($frames)-1]->getMethod());
+        $this->assertEquals('testFramesOrder', $frames[count($frames)-2]->getMethod());
+    }
+    
+    /**
+     * @dataProvider captureErrorStacktracesProvider
+     */
+    public function testCaptureErrorStacktracesError(
+        $captureErrorStacktraces,
+        $expected
+    ) {
+    
+        $dataBuilder = new DataBuilder(array(
+            'accessToken' => 'abcd1234efef5678abcd1234567890be',
+            'environment' => 'tests',
+            'capture_error_stacktraces' => $captureErrorStacktraces,
+            'levelFactory' => new LevelFactory,
+            'utilities' => new Utilities
+        ));
+        
+        $result = $dataBuilder->generateErrorWrapper(E_ERROR, 'bork', null, null);
+        $frames = $result->getBacktrace();
+        
+        $this->assertEquals($expected, count($frames) === 0);
+    }
+    
+    public function captureErrorStacktracesProvider()
+    {
+        return array(
+            array(false,true),
+            array(true, false)
+        );
     }
 }

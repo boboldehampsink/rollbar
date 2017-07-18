@@ -3,14 +3,20 @@
 use Psr\Log\AbstractLogger;
 use Rollbar\Payload\Payload;
 use Rollbar\Payload\Level;
+use Rollbar\Utilities;
+use Rollbar\Truncation\Truncation;
 
 class RollbarLogger extends AbstractLogger
 {
     private $config;
+    private $levelFactory;
+    private $truncation;
 
     public function __construct(array $config)
     {
         $this->config = new Config($config);
+        $this->levelFactory = new LevelFactory();
+        $this->truncation = new Truncation();
     }
 
     public function configure(array $config)
@@ -30,17 +36,23 @@ class RollbarLogger extends AbstractLogger
 
     public function log($level, $toLog, array $context = array())
     {
-        if (Level::fromName($level) === null) {
+        if (!$this->levelFactory->isValidLevel($level)) {
             throw new \Psr\Log\InvalidArgumentException("Invalid log level '$level'.");
+        }
+        $isUncaught = false;
+        if (array_key_exists(Utilities::IS_UNCAUGHT_KEY, $context) && $context[Utilities::IS_UNCAUGHT_KEY]) {
+            $isUncaught = true;
+            unset($context[Utilities::IS_UNCAUGHT_KEY]);
         }
         $accessToken = $this->getAccessToken();
         $payload = $this->getPayload($accessToken, $level, $toLog, $context);
         
-        if ($this->config->checkIgnored($payload, $accessToken, $toLog)) {
+        if ($this->config->checkIgnored($payload, $accessToken, $toLog, $isUncaught)) {
             $response = new Response(0, "Ignored");
         } else {
-            $scrubbed = $this->scrub($payload);
-            $response = $this->config->send($scrubbed, $accessToken);
+            $toSend = $this->scrub($payload);
+            $toSend = $this->truncate($toSend);
+            $response = $this->config->send($toSend, $accessToken);
         }
         
         $this->handleResponse($payload, $response);
@@ -58,6 +70,11 @@ class RollbarLogger extends AbstractLogger
     {
         return $this->config->getAccessToken();
     }
+    
+    public function getDataBuilder()
+    {
+        return $this->config->getDataBuilder();
+    }
 
     protected function handleResponse($payload, $response)
     {
@@ -71,7 +88,16 @@ class RollbarLogger extends AbstractLogger
     protected function scrub(Payload $payload)
     {
         $serialized = $payload->jsonSerialize();
-        $serialized['data'] = $this->config->getDataBuilder()->scrub($serialized['data']);
+        $serialized['data'] = $this->config->getScrubber()->scrub($serialized['data']);
         return $serialized;
+    }
+    
+    /**
+     * @param array $payload
+     * @return array
+     */
+    protected function truncate(array $payload)
+    {
+        return $this->truncation->truncate($payload);
     }
 }

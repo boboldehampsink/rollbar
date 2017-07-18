@@ -116,52 +116,6 @@
         ]
     },
     {
-        "name": "packfire/php5.3-compat",
-        "version": "1.0.0",
-        "version_normalized": "1.0.0.0",
-        "source": {
-            "type": "git",
-            "url": "https://github.com/packfire/php5.3-compatibility.git",
-            "reference": "b6f257d07b6e0891433857262435622fd4ebd56d"
-        },
-        "dist": {
-            "type": "zip",
-            "url": "https://api.github.com/repos/packfire/php5.3-compatibility/zipball/b6f257d07b6e0891433857262435622fd4ebd56d",
-            "reference": "b6f257d07b6e0891433857262435622fd4ebd56d",
-            "shasum": ""
-        },
-        "require": {
-            "php": ">=5.3.0"
-        },
-        "time": "2012-10-28T05:29:18+00:00",
-        "type": "library",
-        "installation-source": "dist",
-        "autoload": {
-            "psr-0": {
-                "": "src/"
-            }
-        },
-        "notification-url": "https://packagist.org/downloads/",
-        "license": [
-            "BSD-3-Clause"
-        ],
-        "authors": [
-            {
-                "name": "Sam-Mauris Yong",
-                "email": "mauris@hotmail.sg",
-                "homepage": "http://mauris.sg/",
-                "role": "Developer"
-            }
-        ],
-        "description": "Provides class and interface compatibility between PHP 5.3 and PHP 5.4 through autoloading.",
-        "homepage": "http://mauris.sg/packfire/",
-        "keywords": [
-            "OOP",
-            "compatibility",
-            "library"
-        ]
-    },
-    {
         "name": "psr/log",
         "version": "1.0.2",
         "version_normalized": "1.0.2.0",
@@ -211,33 +165,93 @@
         ]
     },
     {
-        "name": "rollbar/rollbar",
+        "name": "fluent/logger",
         "version": "v1.0.1",
         "version_normalized": "1.0.1.0",
         "source": {
             "type": "git",
-            "url": "https://github.com/rollbar/rollbar-php.git",
-            "reference": "9e3573d77fd33b3cf922af786f7e8828fea7b574"
+            "url": "https://github.com/fluent/fluent-logger-php.git",
+            "reference": "c5a19ba8eb5e15f9ade72afeffba6b6e7eb51155"
         },
         "dist": {
             "type": "zip",
-            "url": "https://api.github.com/repos/rollbar/rollbar-php/zipball/9e3573d77fd33b3cf922af786f7e8828fea7b574",
-            "reference": "9e3573d77fd33b3cf922af786f7e8828fea7b574",
+            "url": "https://api.github.com/repos/fluent/fluent-logger-php/zipball/c5a19ba8eb5e15f9ade72afeffba6b6e7eb51155",
+            "reference": "c5a19ba8eb5e15f9ade72afeffba6b6e7eb51155",
+            "shasum": ""
+        },
+        "require": {
+            "php": ">=5.3.0"
+        },
+        "require-dev": {
+            "phpunit/phpunit": "~4.3",
+            "phpunit/phpunit-mock-objects": "2.3.0"
+        },
+        "time": "2017-02-15T07:14:53+00:00",
+        "type": "library",
+        "installation-source": "dist",
+        "autoload": {
+            "psr-4": {
+                "Fluent\\Logger\\": "src/"
+            }
+        },
+        "notification-url": "https://packagist.org/downloads/",
+        "license": [
+            "Apache"
+        ],
+        "authors": [
+            {
+                "name": "Shuhei Tanuma",
+                "email": "chobieee@gmail.com"
+            },
+            {
+                "name": "Sotaro Karasawa",
+                "email": "sotarok@crocos.co.jp"
+            },
+            {
+                "name": "DQNEO",
+                "email": "dqneoo@gmail.com"
+            }
+        ],
+        "description": "a logging library for Fluentd",
+        "homepage": "http://github.com/fluent/fluent-logger-php",
+        "keywords": [
+            "log",
+            "logging"
+        ]
+    },
+    {
+        "name": "rollbar/rollbar",
+        "version": "v1.2.0",
+        "version_normalized": "1.2.0.0",
+        "source": {
+            "type": "git",
+            "url": "https://github.com/rollbar/rollbar-php.git",
+            "reference": "02b4e64be5b5bc45af7856332836c836a2825f12"
+        },
+        "dist": {
+            "type": "zip",
+            "url": "https://api.github.com/repos/rollbar/rollbar-php/zipball/02b4e64be5b5bc45af7856332836c836a2825f12",
+            "reference": "02b4e64be5b5bc45af7856332836c836a2825f12",
             "shasum": ""
         },
         "require": {
             "ext-curl": "*",
-            "packfire/php5.3-compat": "*",
+            "fluent/logger": "^1.0",
             "psr/log": "~1.0.2"
         },
         "require-dev": {
             "codeclimate/php-test-reporter": "dev-master",
             "mockery/mockery": "0.9.*",
             "monolog/monolog": "*",
+            "packfire/php5.3-compat": "*",
+            "phpmd/phpmd": "@stable",
             "phpunit/phpunit": "4.8.*",
             "squizlabs/php_codesniffer": "2.*"
         },
-        "time": "2017-05-01T22:57:43+00:00",
+        "suggest": {
+            "packfire/php5.3-compat": "for backward compatibility with PHP 5.3"
+        },
+        "time": "2017-07-05T17:46:25+00:00",
         "type": "library",
         "installation-source": "dist",
         "autoload": {

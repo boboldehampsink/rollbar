@@ -2,6 +2,7 @@
 
 use Rollbar\Payload\Level;
 use Rollbar\Payload\Payload;
+use Rollbar\TestHelpers\Exceptions\SilentExceptionSampleRate;
 
 class RollbarLoggerTest extends \PHPUnit_Framework_TestCase
 {
@@ -28,6 +29,16 @@ class RollbarLoggerTest extends \PHPUnit_Framework_TestCase
             "access_token" => "ad865e76e7fb496fab096ac07b1dbabb",
             "environment" => "testing-php"
         ));
+        $response = $l->log(Level::WARNING, "Testing PHP Notifier", array());
+        $this->assertEquals(200, $response->getStatus());
+    }
+    
+    public function testLogStaticLevel()
+    {
+        $l = new RollbarLogger(array(
+            "access_token" => "ad865e76e7fb496fab096ac07b1dbabb",
+            "environment" => "testing-php"
+        ));
         $response = $l->log(Level::warning(), "Testing PHP Notifier", array());
         $this->assertEquals(200, $response->getStatus());
     }
@@ -41,8 +52,37 @@ class RollbarLoggerTest extends \PHPUnit_Framework_TestCase
                 E_ERROR => 0
             )
         ));
-        $response = $l->log(Level::error(), new ErrorWrapper(E_ERROR, '', null, null, array()), array());
+        $response = $l->log(
+            Level::ERROR,
+            new ErrorWrapper(
+                E_ERROR,
+                '',
+                null,
+                null,
+                array(),
+                new Utilities
+            ),
+            array()
+        );
         $this->assertEquals(0, $response->getStatus());
+    }
+
+    public function testExceptionSampleRates()
+    {
+        $l = new RollbarLogger(array(
+            "access_token" => "ad865e76e7fb496fab096ac07b1dbabb",
+            "environment" => "testing-php",
+            "exception_sample_rates" => array(
+                'Rollbar\TestHelpers\Exceptions\SilentExceptionSampleRate' => 0.0
+            )
+        ));
+        $response = $l->log(Level::ERROR, new SilentExceptionSampleRate);
+        
+        $this->assertEquals(0, $response->getStatus());
+        
+        $response = $l->log(Level::ERROR, new \Exception);
+        
+        $this->assertEquals(200, $response->getStatus());
     }
 
     public function testIncludedErrNo()
@@ -52,7 +92,18 @@ class RollbarLoggerTest extends \PHPUnit_Framework_TestCase
             "environment" => "testing-php",
             "included_errno" => E_ERROR | E_WARNING
         ));
-        $response = $l->log(Level::error(), new ErrorWrapper(E_USER_ERROR, '', null, null, array()), array());
+        $response = $l->log(
+            Level::ERROR,
+            new ErrorWrapper(
+                E_USER_ERROR,
+                '',
+                null,
+                null,
+                array(),
+                new Utilities
+            ),
+            array()
+        );
         $this->assertEquals(0, $response->getStatus());
     }
     
@@ -68,13 +119,14 @@ class RollbarLoggerTest extends \PHPUnit_Framework_TestCase
         
         $config = new Config(array_replace_recursive($defaultConfig, $config));
 
-        $dataBuilder = new DataBuilder($config->getConfigArray());
-        $data = $dataBuilder->makeData(Level::error(), "testing", $context);
+        $dataBuilder = $config->getDataBuilder();
+        $data = $dataBuilder->makeData(Level::ERROR, "testing", $context);
         $payload = new Payload($data, $config->getAccessToken());
 
         $scrubbed = $payload->jsonSerialize();
+        $scrubber = $config->getScrubber();
 
-        $result = $dataBuilder->scrub($scrubbed);
+        $result = $scrubber->scrub($scrubbed);
         
         return $result;
     }
@@ -94,7 +146,6 @@ class RollbarLoggerTest extends \PHPUnit_Framework_TestCase
         $replacement = '*'
     ) {
     
-        
         $this->assertEquals(
             str_repeat($replacement, 8),
             $result[$scrubField],
@@ -224,6 +275,34 @@ class RollbarLoggerTest extends \PHPUnit_Framework_TestCase
     /**
      * @dataProvider scrubDataProvider
      */
+    public function testMakeDataScrubPerson($testData)
+    {
+        $testData['id'] = '123';
+        $result = $this->scrubTestHelper(
+            array(
+                'person' => $testData,
+                'scrub_whitelist' => array(
+                    'data.person.recursive.sensitive'
+                )
+            )
+        );
+        
+        $this->assertEquals(
+            str_repeat('*', 8),
+            $result['data']['person']['sensitive'],
+            "Person did not get scrubbed."
+        );
+        
+        $this->assertNotEquals(
+            str_repeat('*', 8),
+            $result['data']['person']['recursive']['sensitive'],
+            "Person recursive.sensitive DID get scrubbed even though it's whitelisted."
+        );
+    }
+    
+    /**
+     * @dataProvider scrubDataProvider
+     */
     public function testGetRequestScrubBodyContext($testData)
     {
         $bodyContext = array(
@@ -291,5 +370,93 @@ class RollbarLoggerTest extends \PHPUnit_Framework_TestCase
             true,
             'x' // query string is scrubbed with "x" rather than "*"
         );
+    }
+
+    public function testPsr3Emergency()
+    {
+        $l = new RollbarLogger(array(
+            "access_token" => "ad865e76e7fb496fab096ac07b1dbabb",
+            "environment" => "testing-php"
+        ));
+
+        // Test that no \Psr\Log\InvalidArgumentException is thrown
+        $l->emergency("Testing PHP Notifier");
+    }
+
+    public function testPsr3Alert()
+    {
+        $l = new RollbarLogger(array(
+            "access_token" => "ad865e76e7fb496fab096ac07b1dbabb",
+            "environment" => "testing-php"
+        ));
+
+        // Test that no \Psr\Log\InvalidArgumentException is thrown
+        $l->alert("Testing PHP Notifier");
+    }
+
+    public function testPsr3Critical()
+    {
+        $l = new RollbarLogger(array(
+            "access_token" => "ad865e76e7fb496fab096ac07b1dbabb",
+            "environment" => "testing-php"
+        ));
+
+        // Test that no \Psr\Log\InvalidArgumentException is thrown
+        $l->critical("Testing PHP Notifier");
+    }
+
+    public function testPsr3Error()
+    {
+        $l = new RollbarLogger(array(
+            "access_token" => "ad865e76e7fb496fab096ac07b1dbabb",
+            "environment" => "testing-php"
+        ));
+
+        // Test that no \Psr\Log\InvalidArgumentException is thrown
+        $l->error("Testing PHP Notifier");
+    }
+
+    public function testPsr3Warning()
+    {
+        $l = new RollbarLogger(array(
+            "access_token" => "ad865e76e7fb496fab096ac07b1dbabb",
+            "environment" => "testing-php"
+        ));
+
+        // Test that no \Psr\Log\InvalidArgumentException is thrown
+        $l->warning("Testing PHP Notifier");
+    }
+
+    public function testPsr3Notice()
+    {
+        $l = new RollbarLogger(array(
+            "access_token" => "ad865e76e7fb496fab096ac07b1dbabb",
+            "environment" => "testing-php"
+        ));
+
+        // Test that no \Psr\Log\InvalidArgumentException is thrown
+        $l->notice("Testing PHP Notifier");
+    }
+
+    public function testPsr3Info()
+    {
+        $l = new RollbarLogger(array(
+            "access_token" => "ad865e76e7fb496fab096ac07b1dbabb",
+            "environment" => "testing-php"
+        ));
+
+        // Test that no \Psr\Log\InvalidArgumentException is thrown
+        $l->info("Testing PHP Notifier");
+    }
+
+    public function testPsr3Debug()
+    {
+        $l = new RollbarLogger(array(
+            "access_token" => "ad865e76e7fb496fab096ac07b1dbabb",
+            "environment" => "testing-php"
+        ));
+
+        // Test that no \Psr\Log\InvalidArgumentException is thrown
+        $l->debug("Testing PHP Notifier");
     }
 }
