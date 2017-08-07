@@ -86,7 +86,8 @@ class RollbarPlugin extends BasePlugin
 
         // Log Craft Errors to Rollbar
         craft()->onError = function ($event) {
-            Rollbar::log(Level::error(), $event->message);
+          $message = sprintf('%s in %s on line %s', $event->message, $event->file, $event->line);
+          Rollbar::log(Level::error(), $message);
         };
     }
 }
