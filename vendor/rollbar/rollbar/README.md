@@ -304,6 +304,8 @@ $config = array(
 ?>
 ```
 
+Also you will have to install a suggested package `fluent/logger`.
+
 
 ### Configuration reference
 
@@ -320,6 +322,16 @@ All of the following options can be passed as keys in the `$config` array.
 <dd>Path to the directory where agent relay log files should be written. Should not include final slash. Only used when handler is `agent`.
 
 Default: `/var/www`
+</dd>
+
+<dt>allow_exec
+</dt>
+<dd>If the branch option is not set, we will attempt to call out to git to discover the branch name
+via the php `exec` function call. If you do not want to allow `exec` to be called, and therefore
+possibly to not gather this context if you do not otherwise provide it via the separate
+configuration option, then set this option to false.
+
+Default: true
 </dd>
 
 <dt>endpoint
@@ -434,7 +446,7 @@ Default: `'rollbar'`
 
 <dt>handler
 </dt>
-<dd>Either `'blocking'`, `'agent'`, or `'fluent'`. `'blocking'` uses curl to send requests immediately; `'agent'` writes a relay log to be consumed by [rollbar-agent](https://github.com/rollbar/rollbar-agent); `'fluent'` send the requests to a [fluentd](https://www.fluentd.org/) instance.
+<dd>Either `'blocking'`, `'agent'`, or `'fluent'`. `'blocking'` uses curl to send requests immediately; `'agent'` writes a relay log to be consumed by [rollbar-agent](https://github.com/rollbar/rollbar-agent); `'fluent'` send the requests to a [fluentd](https://www.fluentd.org/) instance and requires the suggested package `fluent/logger`.
 
 Default: `'blocking'`
 </dd>

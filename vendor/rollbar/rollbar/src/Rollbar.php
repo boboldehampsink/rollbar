@@ -31,6 +31,7 @@ class Rollbar
             if ($handleFatal) {
                 self::setupFatalHandling();
             }
+            self::setupBatchHandling();
         }
     }
 
@@ -70,7 +71,6 @@ class Rollbar
     public static function exceptionHandler($exception)
     {
         self::log(Level::ERROR, $exception, array(Utilities::IS_UNCAUGHT_KEY => true));
-        
         restore_exception_handler();
         throw $exception;
     }
@@ -149,7 +149,8 @@ class Rollbar
             return;
         }
         $last_error = error_get_last();
-        if (!is_null($last_error) && in_array($last_error['type'], self::$fatalErrors, true)) {
+        
+        if (self::shouldLogFatal($last_error)) {
             $errno = $last_error['type'];
             $errstr = $last_error['message'];
             $errfile = $last_error['file'];
@@ -158,6 +159,16 @@ class Rollbar
             $extra = array(Utilities::IS_UNCAUGHT_KEY => true);
             self::$logger->log(Level::CRITICAL, $exception, $extra);
         }
+    }
+    
+    protected static function shouldLogFatal($last_error)
+    {
+        return
+            !is_null($last_error) &&
+            in_array($last_error['type'], self::$fatalErrors, true) &&
+            // don't log uncaught exceptions as they were handled by exceptionHandler()
+            !(isset($last_error['message']) &&
+              strpos($last_error['message'], 'Uncaught exception') === 0);
     }
 
     private static function generateErrorWrapper($errno, $errstr, $errfile, $errline)
@@ -174,6 +185,27 @@ class Rollbar
     private static function getNotInitializedResponse()
     {
         return new Response(0, "Rollbar Not Initialized");
+    }
+    
+    public static function setupBatchHandling()
+    {
+        register_shutdown_function('Rollbar\Rollbar::flushAndWait');
+    }
+
+    public static function flush()
+    {
+        if (is_null(self::$logger)) {
+            return;
+        }
+        self::$logger->flush();
+    }
+
+    public static function flushAndWait()
+    {
+        if (is_null(self::$logger)) {
+            return;
+        }
+        self::$logger->flushAndWait();
     }
     
     // @codingStandardsIgnoreStart
@@ -249,15 +281,5 @@ class Rollbar
         return false;
     }
 
-    /**
-     * Do nothing silently to not cause backwards compatibility issues.
-     *
-     * @deprecated 1.0.0
-     */
-    public static function flush()
-    {
-        return;
-    }
-    
     // @codingStandardsIgnoreEnd
 }

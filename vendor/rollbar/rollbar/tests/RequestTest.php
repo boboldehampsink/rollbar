@@ -3,7 +3,7 @@
 use \Mockery as m;
 use Rollbar\Payload\Request;
 
-class RequestTest extends \PHPUnit_Framework_TestCase
+class RequestTest extends BaseRollbarTest
 {
     public function testUrl()
     {
@@ -86,7 +86,7 @@ class RequestTest extends \PHPUnit_Framework_TestCase
             "data" => array(
                 "Data" => "Parameters"
             ),
-            "access_token" => "123abc"
+            "access_token" => $this->getTestAccessToken()
         );
         $this->assertEquals($post2, $request->setPost($post2)->getPost());
     }
@@ -116,8 +116,9 @@ class RequestTest extends \PHPUnit_Framework_TestCase
     public function testExtra()
     {
         $request = new Request();
-        $request->test = "testing";
-        $this->assertEquals("testing", $request->test);
+        $request->setExtras(array("test" => "testing"));
+        $extras = $request->getExtras();
+        $this->assertEquals("testing", $extras["test"]);
     }
 
     public function testEncode()
@@ -140,7 +141,7 @@ class RequestTest extends \PHPUnit_Framework_TestCase
             ->setQueryString("?fetch_account=true&error_level=11")
             ->setUserIp("170.16.58.0");
 
-        $request->test = "testing";
+        $request->setExtras(array("test" => "testing"));
 
         $expected = '{' .
             '"url":"www.rollbar.com\\/account\\/project",' .

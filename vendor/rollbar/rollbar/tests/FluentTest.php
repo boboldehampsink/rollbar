@@ -4,11 +4,17 @@ namespace Rollbar;
 
 use Rollbar\Payload\Level;
 
-class FluentTest extends \PHPUnit_Framework_TestCase
+class FluentTest extends BaseRollbarTest
 {
 
     public function testFluent()
     {
+        if (!class_exists('Fluent\Logger\FluentLogger')) {
+            $this->markTestSkipped(
+                'Suggested package fluent/logger not installed, skip FluentTest'
+            );
+        }
+        
         $socket = socket_create_listen(null);
         socket_getsockname($socket, $address, $port);
 
@@ -17,6 +23,7 @@ class FluentTest extends \PHPUnit_Framework_TestCase
             'environment' => 'testing'
         ), false, false, false);
         $logger = Rollbar::scope(array(
+            'batched' => false,
             'fluent_host' => $address,
             'fluent_port' => $port,
             'handler' => 'fluent'

@@ -242,7 +242,11 @@ class DataBuilder implements DataBuilderInterface
         if (!isset($fromConfig)) {
             $fromConfig = $this->tryGet($config, 'branch');
         }
-        $this->serverBranch = self::$defaults->gitBranch($fromConfig);
+        $allowExec = $this->tryGet($config, 'allow_exec');
+        if (!isset($allowExec)) {
+            $allowExec = true;
+        }
+        $this->serverBranch = self::$defaults->gitBranch($fromConfig, $allowExec);
     }
 
     protected function setServerCodeVersion($config)
@@ -584,12 +588,10 @@ class DataBuilder implements DataBuilderInterface
             $extras = array();
         }
 
-        foreach ($extras as $key => $val) {
-            $request->$key = $val;
-        }
+        $request->setExtras($extras);
         
         if (isset($_SESSION) && is_array($_SESSION) && count($_SESSION) > 0) {
-            $request->session = $_SESSION;
+            $request->setSession($_SESSION);
         }
         return $request;
     }
@@ -744,7 +746,7 @@ class DataBuilder implements DataBuilderInterface
     /*
      * @SuppressWarnings(PHPMD.Superglobals)
      */
-    protected function getHeaders()
+    public function getHeaders()
     {
         $headers = array();
         if (isset($_SERVER)) {
@@ -752,11 +754,7 @@ class DataBuilder implements DataBuilderInterface
                 if (substr($key, 0, 5) == 'HTTP_') {
                     // convert HTTP_CONTENT_TYPE to Content-Type, HTTP_HOST to Host, etc.
                     $name = strtolower(substr($key, 5));
-                    if (strpos($name, '_') != -1) {
-                        $name = preg_replace('/ /', '-', ucwords(preg_replace('/_/', ' ', $name)));
-                    } else {
-                        $name = ucfirst($name);
-                    }
+                    $name = str_replace(' ', '-', ucwords(str_replace('_', ' ', $name)));
                     $headers[$name] = $val;
                 }
             }
@@ -855,11 +853,9 @@ class DataBuilder implements DataBuilderInterface
             $extras = array();
         }
 
-        foreach ($extras as $key => $val) {
-            $server->$key = $val;
-        }
+        $server->setExtras($extras);
         if (isset($_SERVER) && array_key_exists('argv', $_SERVER)) {
-            $server->argv = $_SERVER['argv'];
+            $server->setArgv($_SERVER['argv']);
         }
         return $server;
     }

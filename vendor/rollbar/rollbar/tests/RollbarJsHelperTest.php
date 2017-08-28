@@ -1,6 +1,6 @@
 <?php namespace Rollbar;
 
-class JsHelperTest extends \PHPUnit_Framework_TestCase
+class JsHelperTest extends BaseRollbarTest
 {
     protected $jsHelper;
     protected $testSnippetPath;
@@ -229,12 +229,10 @@ class JsHelperTest extends \PHPUnit_Framework_TestCase
     public function testConfigJsTag()
     {
         $config = array(
-            'options' => array(
-                'config1' => 'value 1'
-            )
+            'config1' => 'value 1'
         );
         
-        $expectedJson = json_encode($config['options']);
+        $expectedJson = json_encode($config);
         $expected = "var _rollbarConfig = $expectedJson;";
         
         $helper = new RollbarJsHelper($config);
@@ -248,7 +246,12 @@ class JsHelperTest extends \PHPUnit_Framework_TestCase
      */
     public function testBuildJs($config, $headers, $nonce, $expected)
     {
-        $result = RollbarJsHelper::buildJs($config, $headers, $nonce);
+        $result = RollbarJsHelper::buildJs(
+            $config,
+            $headers,
+            $nonce,
+            "var customJs = true;"
+        );
         
         $this->assertEquals($expected, $result);
     }
@@ -260,7 +263,11 @@ class JsHelperTest extends \PHPUnit_Framework_TestCase
     {
         $helper = new RollbarJsHelper($config);
         
-        $result = $helper->addJs($headers, $nonce);
+        $result = $helper->addJs(
+            $headers,
+            $nonce,
+            "var customJs = true;"
+        );
         
         $this->assertEquals($expected, $result);
     }
@@ -276,20 +283,20 @@ class JsHelperTest extends \PHPUnit_Framework_TestCase
                 null,   // 'nonce'
                 "\n<script type=\"text/javascript\">" .
                 "var _rollbarConfig = {};" .
-                $expectedJs .
+                $expectedJs . ";" .
+                "var customJs = true;" .
                 "</script>"
             ),
             array(
                 array(
-                    'options' => array(
-                        'foo' => 'bar'
-                    )
+                    'foo' => 'bar'
                 ),
                 array(),
                 null,
                 "\n<script type=\"text/javascript\">" .
                 "var _rollbarConfig = {\"foo\":\"bar\"};" .
-                $expectedJs .
+                $expectedJs . ";" .
+                "var customJs = true;" .
                 "</script>"
             ),
             array(
@@ -300,7 +307,8 @@ class JsHelperTest extends \PHPUnit_Framework_TestCase
                 'stub-nonce',
                 "\n<script type=\"text/javascript\" nonce=\"stub-nonce\">" .
                 "var _rollbarConfig = {};" .
-                $expectedJs .
+                $expectedJs . ";" .
+                "var customJs = true;" .
                 "</script>"
             ),
         );
