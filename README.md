@@ -33,6 +33,9 @@ If you want to get your client token in the templates, just use
 
 Changelog
 =================
+### 1.5.2
+ - Now reports full PHP error message
+
 ### 1.5.1
  - Updated Rollbar to 1.2.0
 
