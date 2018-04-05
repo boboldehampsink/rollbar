@@ -1,10 +1,16 @@
-Rollbar plugin for Craft CMS
+DEPRECATED - Rollbar plugin for Craft CMS
 =================
 
 Plugin that allows you to log Craft Errors/Exceptions to Rollbar.
 
 __Important__  
 The plugin's folder should be named "rollbar"
+
+Deprecated
+=================
+
+With the release of Craft 3 on 4-4-2018, this plugin has been deprecated. You can still use this with Craft 2 but you are encouraged to use (and develop) a Craft 3 version. At this moment, I have no plans to do so.
+
 
 Features
 =================
